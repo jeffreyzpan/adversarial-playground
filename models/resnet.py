@@ -192,6 +192,27 @@ class ResNet(nn.Module):
                                 norm_layer=norm_layer))
 
         return nn.Sequential(*layers)
+    
+    def return_hidden_state_memory(self):
+        final_list = []
+        for i, m in enumerate(self.modules()):
+            if isinstance(m, nn.Linear):
+                final_list.append(m.hidden_states)
+                m.hidden_states = []
+        return final_list
+    
+    def insert_forward_hooks(self):
+        self.hook_list = []
+
+        def hook(module, input, output):
+            module.hidden_states.append(output) #store the hidden state for each input in the fc layer
+
+        for i, m in enumerate(self.modules()):
+            if isinstance(m, nn.Linear):
+                layer_hook = m.register_forward_hook(hook)
+                self.hook_list.append(layer_hook)
+                m.hidden_states = []
+        self.forward(torch.randn(1, 3, 224, 224, dtype=torch.float).cuda()) #add the hooks via a dry pass with random input
 
     def _forward_impl(self, x):
         # See note [TorchScript super()]
