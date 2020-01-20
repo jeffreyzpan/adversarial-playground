@@ -2,3 +2,5 @@ datasets
 .DS_Store
 *.pth.tar
 .vscode
+*.swp
+
