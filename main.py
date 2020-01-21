@@ -8,8 +8,10 @@ import torchvision.transforms as transforms
 from tensorboardX import SummaryWriter
 import models
 
+from art.classifiers import PyTorchClassifier
 import art.attacks.evasion as evasion
 import art.defences as defences
+import numpy as np
 
 model_names = sorted(name for name in models.__dict__
   if name.islower() and not name.startswith("__")
@@ -21,7 +23,7 @@ parser.add_argument('--dataset', type=str, choices=['sms-spam', 'xrays', 'gtsrb'
 parser.add_argument('--arch', metavar='ARCH', default='resnet50', help='model architecture: to evaluate robustness on (default: resnet50)')
 parser.add_argument('--workers', type=int, default=16, help='number of data loading workers to use')
 parser.add_argument('--pretrained', type=str, default='', help='path to pretrained model')
-parser.add_argument('--gpu_ids', type=str, default='0,1,2,3', help='comma-seperated string of gpu ids to use for acceleration')
+parser.add_argument('--gpu_ids', type=str, default='0,1,2,3', help='comma-seperated string of gpu ids to use for acceleration (-1 for cpu only)')
 # Hyperparameters
 parser.add_argument('--epochs', type=int, default=100, help='number of epochs to train for')
 parser.add_argument('--batch_size', type=int, default=128, help='batch size')
@@ -33,15 +35,20 @@ parser.add_argument('--weight_decay', type=float, default=0.0001, help='weight d
 # Model checkpoint flags
 parser.add_argument('--print_freq', default=200, type=int, metavar='N', help='print frequency (default: 200)')
 parser.add_argument('--save_path', type=str, default='checkpoints', help='Folder to save checkpoints and log.')
+parser.add_argument('--train', action='store_true', help='train the model')
 parser.add_argument('--resume', default=None, type=str, metavar='PATH', help='path to latest checkpoint (default: none)')
 parser.add_argument('--start_epoch', default=0, type=int, metavar='N', help='manual epoch number (useful on restarts)')
 parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
 
 # Experiments
-parser.add_argument('--attacks', type=str, default='all', help='comma seperated string of attacks to evaluate')
-parser.add_argument('--defences', type=str, default='all', help='comma seperated string of defences to evaluate')
+parser.add_argument('--eval_attacks', action='store_true', help='evaluate attacks on model')
+parser.add_argument('--attacks', type=str, default='fgsm', help='comma seperated string of attacks to evaluate')
+parser.add_argument('--defences', type=str, default='', help='comma seperated string of defences to evaluate') #TODO fill in default defences
 
 global best_acc1
+
+   # Below training loop, train function, val function, and utilties for those functions are adapted from: https://github.com/pytorch/examples/blob/master/imagenet/main.py
+
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -69,7 +76,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         # measure data loading time
         data_time.update(time.time() - end)
 
-        if args.gpu_ids:
+        if '-1' not in args.gpu_ids:
             images = images.cuda(non_blocking=True)
             target = target.cuda(non_blocking=True)
 
@@ -123,11 +130,14 @@ def validate(val_loader, model, criterion, epoch, args):
 
     # switch to evaluate mode
     model.eval()
+    print(next(model.parameters()).is_cuda)
+    import pdb
+    pdb.set_trace()
 
     with torch.no_grad():
         end = time.time()
         for i, (images, target) in enumerate(val_loader):
-            if args.gpu_ids is not None:
+            if '-1' not in args.gpu_ids:
                 images = images.cuda(non_blocking=True)
                 target = target.cuda(non_blocking=True)
 
@@ -160,6 +170,18 @@ def validate(val_loader, model, criterion, epoch, args):
         summary.add_scalar('test loss', losses.avg, epoch)
 
     return top1.avg
+
+def eval_attacks(test_images, test_labels, classifier, criterion, attacks, defences): 
+
+    for attack in attack_list.values():
+        x_test_adv = attack.generate(x=test_images)
+        predictions = classifier.predict(test_images)
+        #top1 = accuracy(predictions, test_labels, topk=(1,1))
+        #print(np.argmax(predictions, axis=1))
+        import pdb
+        pdb.set_trace()
+        accuracy = np.sum(np.argmax(predictions, axis=1) == test_labels) / len(test_labels)
+        print('Accuracy on adversarial test examples: {}%'.format(accuracy * 100))
 
 def save_checkpoint(state, is_best, save_path, filename='checkpoint.pth.tar'):
     filename=os.path.join(save_path, filename)
@@ -240,7 +262,7 @@ if __name__ == '__main__':
     if torch.cuda.is_available():
         gpu_id_list = [int(i.strip()) for i in args.gpu_ids.split(',')]
     else:
-        gpu_id_list = None
+        gpu_id_list = [-1]
 
     if not os.path.isdir(args.save_path):
         os.makedirs(args.save_path)
@@ -251,8 +273,10 @@ if __name__ == '__main__':
 
     if args.dataset == 'xrays' or args.dataset == 'sms-spam':
         num_classes = 2
+        input_shape = (1, 224, 224)
     if args.dataset == 'gtsrb':
         num_classes = 43
+        input_shape = (1, 224, 224)
     if args.dataset == 'toxic-comments':
         num_classes = 6
 
@@ -269,9 +293,22 @@ if __name__ == '__main__':
                             num_workers=args.workers, pin_memory=True)
 
     model = models.__dict__[args.arch](num_classes=num_classes)
-    print(model)
 
-    if gpu_id_list:
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '{}'".format(args.resume))
+            checkpoint = torch.load(args.resume) 
+            checkpoint['state_dict'] = {n.replace('module.', '') : v for n, v in checkpoint['state_dict'].items()}
+            model.load_state_dict(checkpoint['state_dict'])
+            print("=> loaded checkpoint '{}'" .format(args.resume))
+        else:
+            print("=> No checkpoint found at '{}'".format(args.resume))
+    else:
+        print("=> Not using any checkpoint for {} model".format(args.arch))
+
+    #print(model)
+
+    if -1 not in gpu_id_list:
         model = torch.nn.DataParallel(model, device_ids = gpu_id_list)
 
     # define loss function (criterion) and optimizer
@@ -279,10 +316,11 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, momentum=args.momentum,
                     weight_decay=args.weight_decay, nesterov=True)
-    if torch.cuda.is_available():
+
+    if -1 not in gpu_id_list and torch.cuda.is_available():
         model.cuda()
         criterion.cuda()
-
+    
     attack_name_list = args.attacks.split(',')
     attack_name_list = [i.strip().lower() for i in attack_name_list] #sanitize inputs
 
@@ -293,6 +331,10 @@ if __name__ == '__main__':
     defence_list = {}
 
     #initialize attacks and append to dict
+
+    print(next(model.parameters()).is_cuda)
+    classifier = PyTorchClassifier(model=model, loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
+    print(next(model.parameters()).is_cuda)
 
     if 'fgsm' in attack_name_list:
         attack_list['fgsm'] = evasion.FastGradientMethod(classifier)
@@ -316,27 +358,37 @@ if __name__ == '__main__':
     if 'saddlepoint' in defence_name_list:
         defence_list['saddlepoint'] = defences.AdversarialTrainer(classifier, attacks=attack_list['pgd'])
 
-    # Below training loop, train function, val function, and utilties for those functions are adapted from: https://github.com/pytorch/examples/blob/master/imagenet/main.py
-    for epoch in range(args.epochs):
+    if args.eval_attacks:
+        image_batches, label_batches = zip(*[batch for batch in test_loader])
+        test_images = torch.cat(image_batches).numpy()
+        test_labels = torch.cat(label_batches).numpy()
+        #print(next(iter(test_loader)))
+        eval_attacks(test_images, test_labels, classifier, criterion, attack_list, defence_list)
 
-        adjust_learning_rate(optimizer, epoch, args)
+    if args.evaluate:
+        validate(test_loader, model, criterion, 1, args)
 
-        # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+    if args.train:
+        for epoch in range(args.epochs):
 
-        # evaluate on validation set
-        acc1 = validate(test_loader, model, criterion, epoch, args)
+            adjust_learning_rate(optimizer, epoch, args)
 
-        # remember best acc@1 and save checkpoint
-        is_best = acc1 > best_acc1
-        best_acc1 = max(acc1, best_acc1)
+            # train for one epoch
+            train(train_loader, model, criterion, optimizer, epoch, args)
+
+            # evaluate on validation set
+            acc1 = validate(test_loader, model, criterion, epoch, args)
+
+            # remember best acc@1 and save checkpoint
+            is_best = acc1 > best_acc1
+            best_acc1 = max(acc1, best_acc1)
         
-        save_checkpoint({
-                    'epoch': epoch + 1,
-                    'arch': args.arch,
-                    'state_dict': model.state_dict(),
-                    'best_acc1': best_acc1,
-                    'optimizer' : optimizer.state_dict(),
-                }, is_best, args.save_path)
+            save_checkpoint({
+                        'epoch': epoch + 1,
+                        'arch': args.arch,
+                        'state_dict': model.state_dict(),
+                        'best_acc1': best_acc1,
+                        'optimizer' : optimizer.state_dict(),
+                    }, is_best, args.save_path)
 
     summary.close()
