@@ -320,48 +320,45 @@ if __name__ == '__main__':
     if -1 not in gpu_id_list and torch.cuda.is_available():
         model.cuda()
         criterion.cuda()
-    
-    attack_name_list = args.attacks.split(',')
-    attack_name_list = [i.strip().lower() for i in attack_name_list] #sanitize inputs
-
-    defence_name_list = args.defences.split(',')
-    defence_name_list = [i.strip().lower() for i in defence_name_list] #sanitize inputs
-
-    attack_list = {}
-    defence_list = {}
-
-    #initialize attacks and append to dict
-
-    print(next(model.parameters()).is_cuda)
-    classifier = PyTorchClassifier(model=model, loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
-    print(next(model.parameters()).is_cuda)
-
-    if 'fgsm' in attack_name_list:
-        attack_list['fgsm'] = evasion.FastGradientMethod(classifier)
-    if 'pgd' in attack_name_list:
-        attack_list['pgd'] = evasion.ProjectedGradientDescent(classifier)
-    if 'hopskipjump' in attack_name_list:
-        attack_list['hsj'] = evasion.HopSkipJump(classifier)
-    if 'query-efficient' in attack_name_list:
-        raise NotImplementedError
-    if 'deepfool' in attack_name_list:
-        attack_list['deepfool'] = evasion.DeepFool(classifier)
-
-    #initialize defenses and append to dict
-
-    if 'thermometer' in defence_name_list:
-        defence_list['thermometer'] = defences.ThermometerEncoding(clip_values) #TODO figure out what actually should go here 
-    if 'pixeldefend' in defence_name_list:
-        defence_list['pixeldefend'] = defences.PixelDefend(clip_values) #TODO figure out what goes here
-    if 'tvm' in defence_name_list:
-        defence_list['tvm'] = defences.TotalVarMin()
-    if 'saddlepoint' in defence_name_list:
-        defence_list['saddlepoint'] = defences.AdversarialTrainer(classifier, attacks=attack_list['pgd'])
 
     if args.eval_attacks:
-        image_batches, label_batches = zip(*[batch for batch in test_loader])
-        test_images = torch.cat(image_batches).numpy()
-        test_labels = torch.cat(label_batches).numpy()
+        attack_name_list = args.attacks.split(',')
+        attack_name_list = [i.strip().lower() for i in attack_name_list] #sanitize inputs
+
+        defence_name_list = args.defences.split(',')
+        defence_name_list = [i.strip().lower() for i in defence_name_list] #sanitize inputs
+
+        attack_list = {}
+        defence_list = {}
+
+        #initialize attacks and append to dict
+
+        classifier = PyTorchClassifier(model=model, loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
+
+        if 'fgsm' in attack_name_list:
+            attack_list['fgsm'] = evasion.FastGradientMethod(classifier)
+        if 'pgd' in attack_name_list:
+            attack_list['pgd'] = evasion.ProjectedGradientDescent(classifier)
+        if 'hopskipjump' in attack_name_list:
+            attack_list['hsj'] = evasion.HopSkipJump(classifier)
+        if 'query-efficient' in attack_name_list:
+            raise NotImplementedError
+        if 'deepfool' in attack_name_list:
+            attack_list['deepfool'] = evasion.DeepFool(classifier)
+
+        #initialize defenses and append to dict
+
+        if 'thermometer' in defence_name_list:
+            defence_list['thermometer'] = defences.ThermometerEncoding(clip_values) #TODO figure out what actually should go here 
+        if 'pixeldefend' in defence_name_list:
+            defence_list['pixeldefend'] = defences.PixelDefend(clip_values) #TODO figure out what goes here
+        if 'tvm' in defence_name_list:
+            defence_list['tvm'] = defences.TotalVarMin()
+        if 'saddlepoint' in defence_name_list:
+            defence_list['saddlepoint'] = defences.AdversarialTrainer(classifier, attacks=attack_list['pgd'])
+            image_batches, label_batches = zip(*[batch for batch in test_loader])
+            test_images = torch.cat(image_batches).numpy()
+            test_labels = torch.cat(label_batches).numpy()
         #print(next(iter(test_loader)))
         eval_attacks(test_images, test_labels, classifier, criterion, attack_list, defence_list)
 
