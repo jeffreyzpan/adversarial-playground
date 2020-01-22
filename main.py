@@ -1,4 +1,4 @@
-import os, sys, shutil, time, random
+import os, sys, shutil, time, random, copy
 import argparse
 
 import torch
@@ -171,17 +171,17 @@ def validate(val_loader, model, criterion, epoch, args):
 
     return top1.avg
 
-def eval_attacks(test_images, test_labels, classifier, criterion, attacks, defences): 
+def gen_attacks(test_images, test_labels, classifier, criterion, attacks, defences): 
+
+    adv_list = []
 
     for attack in attack_list.values():
-        x_test_adv = attack.generate(x=test_images)
-        predictions = classifier.predict(test_images)
-        #top1 = accuracy(predictions, test_labels, topk=(1,1))
-        #print(np.argmax(predictions, axis=1))
-        import pdb
-        pdb.set_trace()
-        accuracy = np.sum(np.argmax(predictions, axis=1) == test_labels) / len(test_labels)
-        print('Accuracy on adversarial test examples: {}%'.format(accuracy * 100))
+        adv_test = attack.generate(x=test_images)
+        adv_set = torch.utils.data.TensorDataset(torch.Tensor(adv_test), torch.Tensor(test_labels).long())
+        adv_loader = torch.utils.data.DataLoader(adv_set)
+        adv_list.append(adv_loader)
+
+    return adv_list
 
 def save_checkpoint(state, is_best, save_path, filename='checkpoint.pth.tar'):
     filename=os.path.join(save_path, filename)
@@ -333,7 +333,7 @@ if __name__ == '__main__':
 
         #initialize attacks and append to dict
 
-        classifier = PyTorchClassifier(model=model, loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
+        classifier = PyTorchClassifier(model=model.deepcopy(), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
 
         if 'fgsm' in attack_name_list:
             attack_list['fgsm'] = evasion.FastGradientMethod(classifier)
@@ -359,8 +359,11 @@ if __name__ == '__main__':
             image_batches, label_batches = zip(*[batch for batch in test_loader])
             test_images = torch.cat(image_batches).numpy()
             test_labels = torch.cat(label_batches).numpy()
-        #print(next(iter(test_loader)))
-        eval_attacks(test_images, test_labels, classifier, criterion, attack_list, defence_list)
+        
+        adv_list = gen_attacks(test_images, test_labels, classifier, criterion, attack_list, defence_list)
+
+        for attack_loader in adv_list:
+            validate(attack_loader, model, criterion, 1, args)
 
     if args.evaluate:
         validate(test_loader, model, criterion, 1, args)
