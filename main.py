@@ -47,7 +47,7 @@ parser.add_argument('--defences', type=str, default='', help='comma seperated st
 
 global best_acc1
 
-   # Below training loop, train function, val function, and utilties for those functions are adapted from: https://github.com/pytorch/examples/blob/master/imagenet/main.py
+# Below training loop, train function, val function, and utilties for those functions are adapted from: https://github.com/pytorch/examples/blob/master/imagenet/main.py
 
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
@@ -172,8 +172,11 @@ def gen_attacks(test_images, test_labels, classifier, criterion, attacks):
 
     adv_list = []
 
+    # loop through list of attacks and generate adversarial images using the given method
     for attack in attacks.values():
         adv_test = attack.generate(x=test_images)
+
+        #convert np array of adv. images to PyTorch dataloader for CUDA validation later
         adv_set = torch.utils.data.TensorDataset(torch.Tensor(adv_test), torch.Tensor(test_labels).long())
         adv_loader = torch.utils.data.DataLoader(adv_set)
         adv_list.append(adv_loader)
@@ -185,9 +188,14 @@ def gen_defences(test_images, adv_images, test_labels, classifier, criterion, de
     def_clean_list = []
     def_adv_list = []
 
+    # loop through list of defenses and generate defended images using the given method if method isn't adv. training based
     for defence in defences.values():
+
+        #apply defense both to clean images and attacked images
         def_clean, _ = defence(test_images)
         def_adv, _ = defence(adv_images)
+
+        #convert np array of defended images to PyTorch dataloader for CUDA validation later
         def_clean_set = torch.utils.data.TensorDataset(torch.Tensor(def_clean), torch.Tensor(test_labels).long())
         def_clean_loader = torch.utils.data.DataLoader(def_clean_set)
         def_clean_list.append(def_clean_loader)
@@ -364,19 +372,22 @@ if __name__ == '__main__':
         #initialize defenses and append to dict
 
         if 'thermometer' in defence_name_list:
-            defence_list['thermometer'] = defences.ThermometerEncoding(clip_values) #TODO figure out what actually should go here 
+            defence_list['thermometer'] = defences.ThermometerEncoding(clip_values=(0,255)) #TODO figure out what actually should go here 
         if 'pixeldefend' in defence_name_list:
-            defence_list['pixeldefend'] = defences.PixelDefend(clip_values) #TODO figure out what goes here
+            defence_list['pixeldefend'] = defences.PixelDefend(clip_values=(0,255)) #TODO figure out what goes here
         if 'tvm' in defence_name_list:
             defence_list['tvm'] = defences.TotalVarMin()
         if 'saddlepoint' in defence_name_list:
             defence_list['saddlepoint'] = defences.AdversarialTrainer(classifier, attacks=attack_list['pgd'])
+
+        #ART appears to only support numpy arrays, so convert dataloader into a numpy array of images
         image_batches, label_batches = zip(*[batch for batch in test_loader])
         test_images = torch.cat(image_batches).numpy()
         test_labels = torch.cat(label_batches).numpy()
         
         adv_list = gen_attacks(test_images, test_labels, classifier, criterion, attack_list)
 
+        #measure attack success
         for attack_loader in adv_list:
             validate(attack_loader, model, criterion, 1, args)
 

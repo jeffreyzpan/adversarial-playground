@@ -205,7 +205,7 @@ class ResNet(nn.Module):
         self.hook_list = []
 
         def hook(module, input, output):
-            module.hidden_states.append(output) #store the hidden state for each input in the fc layer
+            module.hidden_states.append(input) #store the hidden state for each input in the fc layer
 
         for i, m in enumerate(self.modules()):
             if isinstance(m, nn.Linear):
