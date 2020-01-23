@@ -42,7 +42,7 @@ parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='ev
 
 # Experiments
 parser.add_argument('--eval_attacks', action='store_true', help='evaluate attacks on model')
-parser.add_argument('--attacks', type=str, default='fgsm', help='comma seperated string of attacks to evaluate')
+parser.add_argument('--attacks', type=str, default='fgsm,pgd,hopskipjump,deepfool', help='comma seperated string of attacks to evaluate')
 parser.add_argument('--defences', type=str, default='', help='comma seperated string of defences to evaluate') #TODO fill in default defences
 
 global best_acc1
@@ -130,9 +130,6 @@ def validate(val_loader, model, criterion, epoch, args):
 
     # switch to evaluate mode
     model.eval()
-    print(next(model.parameters()).is_cuda)
-    import pdb
-    pdb.set_trace()
 
     with torch.no_grad():
         end = time.time()
@@ -171,17 +168,35 @@ def validate(val_loader, model, criterion, epoch, args):
 
     return top1.avg
 
-def gen_attacks(test_images, test_labels, classifier, criterion, attacks, defences): 
+def gen_attacks(test_images, test_labels, classifier, criterion, attacks): 
 
     adv_list = []
 
-    for attack in attack_list.values():
+    for attack in attacks.values():
         adv_test = attack.generate(x=test_images)
         adv_set = torch.utils.data.TensorDataset(torch.Tensor(adv_test), torch.Tensor(test_labels).long())
         adv_loader = torch.utils.data.DataLoader(adv_set)
         adv_list.append(adv_loader)
 
     return adv_list
+
+def gen_defences(test_images, adv_images, test_labels, classifier, criterion, defences):
+    
+    def_clean_list = []
+    def_adv_list = []
+
+    for defence in defences.values():
+        def_clean, _ = defence(test_images)
+        def_adv, _ = defence(adv_images)
+        def_clean_set = torch.utils.data.TensorDataset(torch.Tensor(def_clean), torch.Tensor(test_labels).long())
+        def_clean_loader = torch.utils.data.DataLoader(def_clean_set)
+        def_clean_list.append(def_clean_loader)
+        def_adv_set = torch.utils.data.TensorDataset(torch.Tensor(def_adv), torch.Tensor(test_labels).long())
+        def_adv_loader = torch.utils.data.DataLoader(def_adv_set)
+        def_adv_list.append(def_adv_loader)
+
+    return def_clean_list, def_adv_list
+        
 
 def save_checkpoint(state, is_best, save_path, filename='checkpoint.pth.tar'):
     filename=os.path.join(save_path, filename)
@@ -333,7 +348,7 @@ if __name__ == '__main__':
 
         #initialize attacks and append to dict
 
-        classifier = PyTorchClassifier(model=model.deepcopy(), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
+        classifier = PyTorchClassifier(model=copy.deepcopy(model), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
 
         if 'fgsm' in attack_name_list:
             attack_list['fgsm'] = evasion.FastGradientMethod(classifier)
@@ -356,11 +371,11 @@ if __name__ == '__main__':
             defence_list['tvm'] = defences.TotalVarMin()
         if 'saddlepoint' in defence_name_list:
             defence_list['saddlepoint'] = defences.AdversarialTrainer(classifier, attacks=attack_list['pgd'])
-            image_batches, label_batches = zip(*[batch for batch in test_loader])
-            test_images = torch.cat(image_batches).numpy()
-            test_labels = torch.cat(label_batches).numpy()
+        image_batches, label_batches = zip(*[batch for batch in test_loader])
+        test_images = torch.cat(image_batches).numpy()
+        test_labels = torch.cat(label_batches).numpy()
         
-        adv_list = gen_attacks(test_images, test_labels, classifier, criterion, attack_list, defence_list)
+        adv_list = gen_attacks(test_images, test_labels, classifier, criterion, attack_list)
 
         for attack_loader in adv_list:
             validate(attack_loader, model, criterion, 1, args)
