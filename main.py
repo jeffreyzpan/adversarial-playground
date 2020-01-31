@@ -5,6 +5,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
+import torchvision.utils as utils
 from tensorboardX import SummaryWriter
 import models
 
@@ -12,6 +13,7 @@ from art.classifiers import PyTorchClassifier
 import art.attacks.evasion as evasion
 import art.defences as defences
 import numpy as np
+from PIL import Image
 
 model_names = sorted(name for name in models.__dict__
   if name.islower() and not name.startswith("__")
@@ -43,7 +45,7 @@ parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='ev
 # Experiments
 parser.add_argument('--eval_attacks', action='store_true', help='evaluate attacks on model')
 parser.add_argument('--attacks', type=str, default='fgsm,pgd,hopskipjump,deepfool', help='comma seperated string of attacks to evaluate')
-parser.add_argument('--defences', type=str, default='', help='comma seperated string of defences to evaluate') #TODO fill in default defences
+parser.add_argument('--defences', type=str, default='ss', help='comma seperated string of defences to evaluate')
 
 global best_acc1
 
@@ -170,42 +172,66 @@ def validate(val_loader, model, criterion, epoch, args):
 
 def gen_attacks(test_images, test_labels, classifier, criterion, attacks): 
 
-    adv_list = []
+    adv_dict = {}
 
     # loop through list of attacks and generate adversarial images using the given method
-    for attack in attacks.values():
-        adv_test = attack.generate(x=test_images)
+    for attack_name, attack in zip(attacks.keys(), attacks.values()):
+        if attack_name == 'hopskipjump':
+            adv_test = None
+            for i in range(3):
+                adv_test = attack.generate(x=test_images, x_adv_init=x_adv, resume=True)
+        else:
+            adv_test = attack.generate(x=test_images)
+        
+        #adv_test = np.moveaxis(adv_test, -1, 1)
+
+        # save adv images for visualization purposes
+        #save_images(adv_test, args.save_path, 'attack_{}'.format(attack_name)) 
 
         #convert np array of adv. images to PyTorch dataloader for CUDA validation later
-        adv_set = torch.utils.data.TensorDataset(torch.Tensor(adv_test), torch.Tensor(test_labels).long())
+        adv_tensor = torch.Tensor(adv_test)
+        adv_set = torch.utils.data.TensorDataset(adv_tensor, torch.Tensor(test_labels).long())
+        #import pdb
+        #pdb.set_trace()
+        #save_images(adv_set[0], args.save_path, 'c')
+        #for image in adv_set:
+        #    save_images(image[0], args.save_path, 'attack_{}'.format(attack_name))
         adv_loader = torch.utils.data.DataLoader(adv_set)
-        adv_list.append(adv_loader)
+        adv_dict[attack_name] = adv_loader
 
-    return adv_list
+    return adv_dict
 
-def gen_defences(test_images, adv_images, test_labels, classifier, criterion, defences):
+def gen_defences(test_images, adv_images, attack_name, test_labels, classifier, criterion, defences):
     
-    def_clean_list = []
-    def_adv_list = []
+    def_clean_dict = {}
+    def_adv_dict = {}
 
     # loop through list of defenses and generate defended images using the given method if method isn't adv. training based
-    for defence in defences.values():
+    for defence_name, defence in zip(defences.keys(), defences.values()):
 
         #apply defense both to clean images and attacked images
-        def_clean, _ = defence(test_images)
+        #def_clean, _ = defence(test_images)
+        #ART defences take in w x h x c, while original input is (c, w, h)
+        #adv_images = np.moveaxis(adv_images, 1, -1)
         def_adv, _ = defence(adv_images)
 
+        #switch channel axis for conversion back to PyTorch
+        #def_adv = np.moveaxis(def_adv, -1, 1)
+
+        save_images(def_adv, args.save_path, 'def_{}_{}'.format(attack_name, defence_name)) 
+
         #convert np array of defended images to PyTorch dataloader for CUDA validation later
+        ''''
         def_clean_set = torch.utils.data.TensorDataset(torch.Tensor(def_clean), torch.Tensor(test_labels).long())
         def_clean_loader = torch.utils.data.DataLoader(def_clean_set)
         def_clean_list.append(def_clean_loader)
+        '''
         def_adv_set = torch.utils.data.TensorDataset(torch.Tensor(def_adv), torch.Tensor(test_labels).long())
         def_adv_loader = torch.utils.data.DataLoader(def_adv_set)
-        def_adv_list.append(def_adv_loader)
+        def_adv_dict[defence_name] = def_adv_loader
 
-    return def_clean_list, def_adv_list
+    return def_clean_dict, def_adv_dict
         
-
 def save_checkpoint(state, is_best, save_path, filename='checkpoint.pth.tar'):
     filename=os.path.join(save_path, filename)
     torch.save(state, filename)
@@ -278,10 +304,17 @@ def accuracy(output, target, topk=(1,)):
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
 
+def save_images(dataset, save_dir, image_type, num_images=50):
+    if not os.path.isdir(os.path.join(save_dir, 'images', image_type)):
+        os.makedirs(os.path.join(save_dir, 'images', image_type))
+    for i, image in enumerate(dataset[:num_images]):
+        utils.save_image(torch.Tensor(image), os.path.join(save_dir, 'images', image_type, 'image_{}.png'.format(i)))
+
 if __name__ == '__main__':
     args = parser.parse_args()
     best_acc1=0
      
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_ids
     if torch.cuda.is_available():
         gpu_id_list = [int(i.strip()) for i in args.gpu_ids.split(',')]
     else:
@@ -299,7 +332,7 @@ if __name__ == '__main__':
         input_shape = (1, 224, 224)
     if args.dataset == 'gtsrb':
         num_classes = 43
-        input_shape = (1, 224, 224)
+        input_shape = (3, 224, 224)
     if args.dataset == 'toxic-comments':
         num_classes = 6
 
@@ -344,6 +377,8 @@ if __name__ == '__main__':
         model.cuda()
         criterion.cuda()
 
+    cudnn.benchmark = True
+
     if args.eval_attacks:
         attack_name_list = args.attacks.split(',')
         attack_name_list = [i.strip().lower() for i in attack_name_list] #sanitize inputs
@@ -356,12 +391,12 @@ if __name__ == '__main__':
 
         #initialize attacks and append to dict
 
-        classifier = PyTorchClassifier(model=copy.deepcopy(model), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
+        classifier = PyTorchClassifier(model=copy.deepcopy(model), clip_values=(0,1), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
 
         if 'fgsm' in attack_name_list:
-            attack_list['fgsm'] = evasion.FastGradientMethod(classifier)
+            attack_list['fgsm'] = evasion.FastGradientMethod(classifier, targeted=False, eps=0.05)
         if 'pgd' in attack_name_list:
-            attack_list['pgd'] = evasion.ProjectedGradientDescent(classifier)
+            attack_list['pgd'] = evasion.ProjectedGradientDescent(classifier, targeted=False, max_iter=10, eps_step=0.1, eps=0.3)
         if 'hopskipjump' in attack_name_list:
             attack_list['hsj'] = evasion.HopSkipJump(classifier)
         if 'query-efficient' in attack_name_list:
@@ -372,24 +407,45 @@ if __name__ == '__main__':
         #initialize defenses and append to dict
 
         if 'thermometer' in defence_name_list:
-            defence_list['thermometer'] = defences.ThermometerEncoding(clip_values=(0,255)) #TODO figure out what actually should go here 
+            defence_list['thermometer'] = defences.ThermometerEncoding(clip_values=(0,1)) 
         if 'pixeldefend' in defence_name_list:
-            defence_list['pixeldefend'] = defences.PixelDefend(clip_values=(0,255)) #TODO figure out what goes here
+            defence_list['pixeldefend'] = defences.PixelDefend(clip_values=(0,1)) 
         if 'tvm' in defence_name_list:
-            defence_list['tvm'] = defences.TotalVarMin()
+            defence_list['tvm'] = defences.TotalVarMin(clip_values=(0,1))
         if 'saddlepoint' in defence_name_list:
             defence_list['saddlepoint'] = defences.AdversarialTrainer(classifier, attacks=attack_list['pgd'])
+        if 'ss' in defence_name_list:
+            defence_list['ss'] = defences.SpatialSmoothing(clip_values=(0,1))
 
         #ART appears to only support numpy arrays, so convert dataloader into a numpy array of images
         image_batches, label_batches = zip(*[batch for batch in test_loader])
         test_images = torch.cat(image_batches).numpy()
         test_labels = torch.cat(label_batches).numpy()
-        
-        adv_list = gen_attacks(test_images, test_labels, classifier, criterion, attack_list)
 
-        #measure attack success
-        for attack_loader in adv_list:
-            validate(attack_loader, model, criterion, 1, args)
+        adv_dict = gen_attacks(test_images, test_labels, classifier, criterion, attack_list)
+        #save_images(test_images, 'clean', args.save_path)
+
+        for attack_name in adv_dict:
+
+            #measure attack success
+            print("Testing performance of attack {}: ".format(attack_name))
+            validate(adv_dict[attack_name], model, criterion, 1, args)
+
+            adv_images, _ = zip(*[batch for batch in adv_dict[attack_name]])
+            #print(adv_images)
+            adv_images = torch.cat(adv_images).numpy()
+            save_images(adv_images, args.save_path, 'attack_{}'.format(attack_name))
+
+            print("Generating defences for attack {}: ".format(attack_name))
+
+            _ , def_adv_dict = gen_defences(test_images, adv_images, attack_name, test_labels, classifier, criterion, defence_list)
+
+            for def_name in def_adv_dict:
+                print("Testing performance of defence {}: ".format(def_name))
+                validate(def_adv_dict[def_name], model, criterion, 1, args)
+                def_images , _ = zip(*[batch for batch in def_adv_dict[def_name]])
+                def_images = torch.cat(def_images).numpy()
+                save_images(def_images, args.save_path, '{}_{}'.format(attack_name, def_name))
 
     if args.evaluate:
         validate(test_loader, model, criterion, 1, args)

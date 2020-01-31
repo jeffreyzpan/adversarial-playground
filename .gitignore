@@ -3,4 +3,5 @@ datasets
 *.pth.tar
 .vscode
 *.swp
+*.png
 
