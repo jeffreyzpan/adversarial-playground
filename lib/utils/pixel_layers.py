@@ -1,6 +1,6 @@
 # Code for PixelCNN++ layers from https://github.com/pclucas14/pixel-cnn-pp
 
-from models.pixel_utils import * 
+from lib.utils.pixel_utils import * 
 import pdb
 import torch 
 import torch.nn as nn
