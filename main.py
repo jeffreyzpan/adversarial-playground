@@ -7,14 +7,15 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.utils as utils
 from tensorboardX import SummaryWriter
-import models
-from utils.utils import *
+import lib.models as models
+from lib.utils.utils import *
+from lib.utils.stock_dataset import generate_stocks_dataset
+from lib.utils.adversarial import gen_attacks, gen_defences
 
 from art.classifiers import PyTorchClassifier
 import art.attacks.evasion as evasion
 import art.defences as defences
 import numpy as np
-from PIL import Image
 
 #get list of valid models from custom models directory
 model_names = sorted(name for name in models.__dict__
@@ -23,7 +24,9 @@ model_names = sorted(name for name in models.__dict__
 
 parser = argparse.ArgumentParser(description='Adversarial Training Benchmarking', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--data_path', type=str, default='datasets/', help='path to dataset')
-parser.add_argument('--dataset', type=str, choices=['sms-spam', 'xrays', 'gtsrb', 'toxic-comments'], help='choose dataset to benchmark adversarial training techniques on.')
+parser.add_argument('--dataset', type=str, choices=['stocks', 'xrays', 'gtsrb', 'esc'], help='choose dataset to benchmark adversarial training techniques on.')
+parser.add_argument('--stock', type=str, help='if evaluating stocks dataset, stock to evaluate on')
+parser.add_argument('--window_size', type=int, default=10, help='number of time steps to predict in the future for stocks')
 parser.add_argument('--arch', metavar='ARCH', default='resnet50', help='model architecture: to evaluate robustness on (default: resnet50)')
 parser.add_argument('--workers', type=int, default=16, help='number of data loading workers to use')
 parser.add_argument('--pretrained', type=str, default='', help='path to pretrained model')
@@ -37,17 +40,17 @@ parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument('--weight_decay', type=float, default=0.0001, help='weight decay')
 
 # Model checkpoint flags
-parser.add_argument('--print_freq', default=200, type=int, metavar='N', help='print frequency (default: 200)')
+parser.add_argument('--print_freq', type=int, default=200, metavar='N', help='print frequency (default: 200)')
 parser.add_argument('--save_path', type=str, default='checkpoints', help='Folder to save checkpoints and log.')
 parser.add_argument('--train', action='store_true', help='train the model')
-parser.add_argument('--resume', default=None, type=str, metavar='PATH', help='path to latest checkpoint (default: none)')
-parser.add_argument('--start_epoch', default=0, type=int, metavar='N', help='manual epoch number (useful on restarts)')
+parser.add_argument('--resume', type=str, default=None, metavar='PATH', help='path to latest checkpoint (default: none)')
+parser.add_argument('--start_epoch', type=int, default=0, metavar='N', help='manual epoch number (useful on restarts)')
 parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
 
 # Experiments
 parser.add_argument('--eval_attacks', action='store_true', help='evaluate attacks on model')
 parser.add_argument('--attacks', type=str, default='fgsm,pgd,hopskipjump,deepfool', help='comma seperated string of attacks to evaluate')
-parser.add_argument('--defences', type=str, default='ss', help='comma seperated string of defences to evaluate')
+parser.add_argument('--defences', type=str, default='jpeg', help='comma seperated string of defences to evaluate')
 
 global best_acc1
 
@@ -57,6 +60,9 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
+    if args.dataset == 'stocks':
+        mse = AverageMeter('MSE', ':.4e')
+        #progress = 
     top1 = AverageMeter('Acc@1', ':6.2f')
     if args.dataset != 'xrays':
         top5 = AverageMeter('Acc@5', ':6.2f')
@@ -74,16 +80,16 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     model.train()
 
     end = time.time()
-    for i, (images, target) in enumerate(train_loader):
+    for i, (inputs, target) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
         if '-1' not in args.gpu_ids:
-            images = images.cuda(non_blocking=True)
+            inputs = inputs.cuda(non_blocking=True)
             target = target.cuda(non_blocking=True)
 
         # compute output
-        output = model(images)
+        output = model(inputs)
         loss = criterion(output, target)
 
         # measure accuracy and record loss
@@ -169,52 +175,6 @@ def validate(val_loader, model, criterion, epoch, args):
 
     return top1.avg
 
-def gen_attacks(test_images, test_labels, classifier, criterion, attacks): 
-
-    adv_dict = {}
-
-    # loop through list of attacks and generate adversarial images using the given method
-    for attack_name, attack in zip(attacks.keys(), attacks.values()):
-
-        #hopskipjump requires multiple iterations for good results
-        if attack_name == 'hopskipjump':
-            adv_test = None
-            for i in range(3):
-                adv_test = attack.generate(x=test_images, x_adv_init=x_adv, resume=True)
-        else:
-            adv_test = attack.generate(x=test_images)
-
-        #convert np array of adv. images to PyTorch dataloader for CUDA validation later
-        adv_tensor = torch.Tensor(adv_test)
-        adv_set = torch.utils.data.TensorDataset(adv_tensor, torch.Tensor(test_labels).long())
-        adv_loader = torch.utils.data.DataLoader(adv_set)
-        adv_dict[attack_name] = adv_loader
-
-    return adv_dict
-
-def gen_defences(test_images, adv_images, attack_name, test_labels, classifier, criterion, defences):
-    
-    def_adv_dict = {}
-
-    # loop through list of defenses and generate defended images using the given method if method isn't adv. training based
-    for defence_name, defence in zip(defences.keys(), defences.values()):
-
-        #ART defences take in w x h x c, while original input is (c, w, h)
-        def_adv, _ = defence(adv_images)
-
-        #switch channel axis for conversion back to PyTorch
-        #def_adv = np.moveaxis(def_adv, -1, 1)
-
-        save_images(def_adv, args.save_path, 'def_{}_{}'.format(attack_name, defence_name)) 
-
-        #convert np array of defended images to PyTorch dataloader for CUDA validation later
-
-        def_adv_set = torch.utils.data.TensorDataset(torch.Tensor(def_adv), torch.Tensor(test_labels).long())
-        def_adv_loader = torch.utils.data.DataLoader(def_adv_set)
-        def_adv_dict[defence_name] = def_adv_loader
-
-    return def_adv_dict
-
 if __name__ == '__main__':
     args = parser.parse_args()
     best_acc1=0
@@ -235,42 +195,65 @@ if __name__ == '__main__':
     summary = SummaryWriter(args.save_path)
     print('==> Output path: {}...'.format(args.save_path))
 
+    print(model_names)
     assert args.arch in model_names, 'Error: model {} not supported'.format(args.arch)
 
     # set variables based on dataset to evaluate on
-    if args.dataset == 'xrays' or args.dataset == 'sms-spam':
+    if args.dataset == 'xrays':
         num_classes = 2
+        # apply resizing and other transforms to dataset
+        train_transform = transforms.Compose(
+            [transforms.RandomHorizontalFlip(), transforms.Resize((224, 224)), transforms.ToTensor()])
+        test_transform = transforms.Compose(
+            [transforms.Resize((224, 224)), transforms.ToTensor()])
         input_shape = (1, 224, 224)
+        criterion = torch.nn.CrossEntropyLoss()
+
+        # create dataset
+        trainset = dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'), transform=train_transform)
+        testset = dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'val'), transform=test_transform) 
+
     if args.dataset == 'gtsrb':
         num_classes = 43
-        input_shape = (3, 224, 224)
-    if args.dataset == 'toxic-comments':
-        num_classes = 6
+        # apply resizing and normalize to mean=0, std=1 (adapted from https://github.com/poojahira/gtsrb-pytorch)
+        train_transform = transforms.Compose(
+            [transforms.RandomHorizontalFlip(), transforms.Resize((32, 32)), transforms.ToTensor(), transforms.Normalize((0.3337, 0.3064, 0.3171), (0.2672, 0.2564, 0.2629))])
+        test_transform = transforms.Compose(
+            [transforms.Resize((32, 32)), transforms.ToTensor()])
+        input_shape = (3, 32, 32)
+        criterion = torch.nn.CrossEntropyLoss()
 
-    # apply resizing and other transforms to dataset
-    train_transform = transforms.Compose(
-        [transforms.RandomHorizontalFlip(), transforms.Resize((224, 224)), transforms.ToTensor()])
-    test_transform = transforms.Compose(
-        [transforms.Resize((224, 224)), transforms.ToTensor()])
+        # create dataset
+        trainset = dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'), transform=train_transform)
+        testset = dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'val'), transform=test_transform) 
+
+    if args.dataset == 'stocks':
+        trainset, testset = generate_stocks_dataset(os.path.join(args.data_path, args.dataset), args.stock, args.window_size)
+        optimizer = torch.nn.MSELoss()
 
     # initialize dataloaders
-    trainset = dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'), transform=train_transform)
-    testset = dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'val'), transform=test_transform) 
 
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True,
                             num_workers=args.workers, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False,
                             num_workers=args.workers, pin_memory=True)
 
-    model = models.__dict__[args.arch](num_classes=num_classes)
+    if args.dataset == 'stocks':
+        model = models.__dict__[args.arch](window_size=args.window_size)
+    else:
+        model = models.__dict__[args.arch](num_classes=num_classes)
 
     if args.resume:
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume) 
             # checkpointed models are wrapped in a nn.DataParallel, so rename the keys in the state_dict to match
-            checkpoint['state_dict'] = {n.replace('module.', '') : v for n, v in checkpoint['state_dict'].items()}
-            model.load_state_dict(checkpoint['state_dict'])
+            try:
+                # our checkpoints save more than just the state_dict, but other checkpoints may only save the state dict, causing a KeyError
+                checkpoint['state_dict'] = {n.replace('module.', '') : v for n, v in checkpoint['state_dict'].items()}
+                model.load_state_dict(checkpoint['state_dict'])
+            except KeyError:
+                model.load_state_dict(checkpoint)
             print("=> loaded checkpoint '{}'" .format(args.resume))
         else:
             print("=> No checkpoint found at '{}'".format(args.resume))
@@ -331,8 +314,12 @@ if __name__ == '__main__':
             defence_list['tvm'] = defences.TotalVarMin(clip_values=(0,1))
         if 'saddlepoint' in defence_name_list:
             defence_list['saddlepoint'] = defences.AdversarialTrainer(classifier, attacks=attack_list['pgd'])
-        if 'ss' in defence_name_list:
-            defence_list['ss'] = defences.SpatialSmoothing(clip_values=(0,1))
+        if 'jpeg' in defence_name_list:
+            defence_list['jpeg'] = defences.JpegCompression(clip_values=(0,1), channel_index=1)
+
+        # get initial validation set accuracy
+
+        validate(test_loader, model, criterion, 1, args)
 
         # ART appears to only support numpy arrays, so convert dataloader into a numpy array of images
         image_batches, label_batches = zip(*[batch for batch in test_loader])
@@ -352,15 +339,21 @@ if __name__ == '__main__':
             adv_images = torch.cat(adv_images).numpy()
 
             # save adv images for visualization purposes
+            #import pdb
+            #pdb.set_trace()
             save_images(adv_images, args.save_path, 'attack_{}'.format(attack_name))
+
+            adv_images = adv_images/255.
 
             print("Generating defences for attack {}: ".format(attack_name))
 
-            _ , def_adv_dict = gen_defences(test_images, adv_images, attack_name, test_labels, classifier, criterion, defence_list)
+            def_adv_dict = gen_defences(test_images, adv_images, attack_name, test_labels, classifier, criterion, defence_list)
 
             for def_name in def_adv_dict:
                 print("Testing performance of defence {}: ".format(def_name))
                 validate(def_adv_dict[def_name], model, criterion, 1, args)
+                import pdb
+                pdb.set_trace()
                 def_images , _ = zip(*[batch for batch in def_adv_dict[def_name]])
                 def_images = torch.cat(def_images).numpy()
 

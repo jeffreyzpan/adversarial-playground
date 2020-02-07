@@ -1,5 +1,6 @@
 import os
 import torch
+import torchvision.utils as utils
 
 # Below utilities adapted from: https://github.com/pytorch/examples/blob/master/imagenet/main.py
 
