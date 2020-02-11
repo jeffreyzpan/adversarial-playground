@@ -8,12 +8,16 @@ def gen_attacks(test_images, test_labels, classifier, criterion, attacks):
     # loop through list of attacks and generate adversarial images using the given method
     for attack_name, attack in zip(attacks.keys(), attacks.values()):
 
+        #x = 
+
         #hopskipjump requires multiple iterations for good results
         if attack_name == 'hopskipjump':
             adv_test = None
             for i in range(3):
                 adv_test = attack.generate(x=test_images, x_adv_init=x_adv, resume=True)
         else:
+            import pdb
+            pdb.set_trace()
             adv_test = attack.generate(x=test_images)
 
         #convert np array of adv. images to PyTorch dataloader for CUDA validation later

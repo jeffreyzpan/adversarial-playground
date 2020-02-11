@@ -4,4 +4,6 @@ datasets
 .vscode
 *.swp
 *.png
-
+logging
+lsf-scripts
+checkpoints

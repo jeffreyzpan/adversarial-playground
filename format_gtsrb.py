@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import subprocess
 
-base_path = 'datasets/gtsrb'
+base_path = '/nobackup/users/jzpan/datasets/gtsrb'
 
 val_meta = pd.read_csv(os.path.join(base_path, 'Test.csv'))
 train_meta = pd.read_csv(os.path.join(base_path, 'Train.csv'))
@@ -16,8 +16,8 @@ train_paths = train_meta['Path'].values
 val_info = zip(val_classes, val_paths)
 train_info = zip(train_classes, train_paths)
 
-#for i in range(43):
-#    subprocess.call('mkdir {}/val/{}'.format(base_path, i), shell=True)
+for i in range(43):
+    subprocess.call('mkdir {}/val/{}'.format(base_path, i), shell=True)
 #    subprocess.call('mkdir {}/train/{}'.format(base_path, i), shell=True)
 
 for info in val_info:
