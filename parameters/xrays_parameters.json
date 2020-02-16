@@ -1,0 +1,52 @@
+{
+    "fgsm":{
+        "eps": 0.05,
+        "targeted": false,
+        "minimal": false,
+        "batch_size": 1
+    },
+    "pgd":{
+        "eps": 0.1,
+        "eps_step": 0.01,
+        "max_iter": 100,
+        "targeted": false,
+        "batch_size": 32
+    },
+    "hopskipjump":{
+        "max_iter": 0,
+        "max_eval": 1000,
+        "init_eval": 10,
+        "targeted": false,
+        "init_size": 100
+    },
+    "deepfool":{
+        "epsilon": 1e-08,
+        "max_iter": 200,
+        "batch_size": 32,
+        "nb_grads":10
+    },
+    "thermometer":{
+        "clip_min": 0,
+        "clip_max": 1,
+        "num_space": 10,
+        "channel_index": 3 
+    },
+    "pixeldefend":{
+        "clip_min": 0,
+        "clip_max": 1,
+        "eps": 16
+    },
+    "tvm":{
+        "prob": 0.3,
+        "lamb": 0.5,
+        "clip_min": 0,
+        "clip_max": 1,
+        "max_iter": 10
+    },
+    "jpeg":{
+        "clip_min": 0,
+        "clip_max": 1,
+        "channel_index": 1,
+        "quality": 50
+    }
+}

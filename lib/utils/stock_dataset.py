@@ -42,8 +42,8 @@ def generate_stocks_dataset(data_path, stock=None, window_len=10):
     
         train_list.append(temp_set)
 
-    # normalize stock values for training labels
-    train_labels = torch.Tensor((training_set['Close'][window_len:].values/training_set['Close'][:-window_len].values)-1)
+    # normalize stock values for training labels and add extra dim to match proper shape
+    train_labels = torch.Tensor((training_set['Close'][window_len:].values/training_set['Close'][:-window_len].values)-1).unsqueeze(-1)
     train_list = [np.array(train_val) for train_val in train_list]
     train_tensor = torch.Tensor(train_list)
 
@@ -57,8 +57,8 @@ def generate_stocks_dataset(data_path, stock=None, window_len=10):
     
         test_list.append(temp_set)
 
-    # normalize stock values for testing labels
-    test_labels = torch.Tensor((test_set['Close'][window_len:].values/test_set['Close'][:-window_len].values)-1)
+    # normalize stock values for testing label and add extra dim to match proper shapes
+    test_labels = torch.Tensor((test_set['Close'][window_len:].values/test_set['Close'][:-window_len].values)-1).unsqueeze(-1)
     test_list = [np.array(test_val) for test_val in test_list]
     test_tensor = torch.Tensor(test_list)
 

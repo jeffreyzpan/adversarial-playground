@@ -8,16 +8,15 @@ def gen_attacks(test_images, test_labels, classifier, criterion, attacks):
     # loop through list of attacks and generate adversarial images using the given method
     for attack_name, attack in zip(attacks.keys(), attacks.values()):
 
-        #x = 
-
+        print(attack_name)
         #hopskipjump requires multiple iterations for good results
         if attack_name == 'hopskipjump':
             adv_test = None
+            iter_step = 10
             for i in range(3):
                 adv_test = attack.generate(x=test_images, x_adv_init=x_adv, resume=True)
+                attack.max_iter = iter_step
         else:
-            import pdb
-            pdb.set_trace()
             adv_test = attack.generate(x=test_images)
 
         #convert np array of adv. images to PyTorch dataloader for CUDA validation later
@@ -34,6 +33,8 @@ def gen_defences(test_images, adv_images, attack_name, test_labels, classifier, 
 
     # loop through list of defenses and generate defended images using the given method if method isn't adv. training based
     for defence_name, defence in zip(defences.keys(), defences.values()):
+        
+        print(defence_name)
 
         #ART defences take in w x h x c, while original input is (c, w, h)
         #adv_images = np.moveaxis(adv_images, 1, -1)

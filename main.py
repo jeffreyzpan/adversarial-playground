@@ -1,4 +1,4 @@
-import os, sys, shutil, time, random, copy
+import os, sys, shutil, time, random, copy, json
 import argparse
 
 import torch
@@ -11,7 +11,7 @@ import lib.models as models
 from lib.utils.utils import *
 from lib.utils.stock_dataset import generate_stocks_dataset
 from lib.utils.adversarial import gen_attacks, gen_defences
-from lib.utils.gtsrb_dataset import data_transforms,data_jitter_hue,data_jitter_brightness,data_jitter_saturation,data_jitter_contrast,data_rotate,data_hvflip,data_shear,data_translate,data_center,data_hflip,data_vflip
+from lib.utils.dataset_transforms import gtsrb_transform,gtsrb_jitter_hue,gtsrb_jitter_brightness,gtsrb_jitter_saturation,gtsrb_jitter_contrast,gtsrb_rotate,gtsrb_hvflip,gtsrb_shear,gtsrb_translate,gtsrb_center,gtsrb_hflip,gtsrb_vflip,xray_transform,xray_jitter_brightness,xray_jitter_saturation,xray_jitter_contrast,xray_hflip
 
 from art.classifiers import PyTorchClassifier
 import art.attacks.evasion as evasion
@@ -52,7 +52,7 @@ parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='ev
 # Experiments
 parser.add_argument('--eval_attacks', action='store_true', help='evaluate attacks on model')
 parser.add_argument('--attacks', type=str, default='fgsm,pgd,hopskipjump,deepfool', help='comma seperated string of attacks to evaluate')
-parser.add_argument('--defences', type=str, default='jpeg,tvm,', help='comma seperated string of defences to evaluate')
+parser.add_argument('--defences', type=str, default='jpeg,tvm', help='comma seperated string of defences to evaluate')
 
 global best_acc1, best_loss
 
@@ -94,9 +94,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
             target = target.cuda(non_blocking=True)
 
         # compute output
-        output = model(inputs)
-        #print(output.shape)
-        loss = criterion(output, target)
+        if args.dataset == 'xrays' or args.dataset == 'gtsrb':
+            output = model(inputs)
+            loss = criterion(output, target)
+        #elif args.dataset == 'stocks':
 
         # measure accuracy and record loss
         if args.dataset == 'xrays':
@@ -244,16 +245,24 @@ if __name__ == '__main__':
     if args.dataset == 'xrays':
         num_classes = 2
         # apply resizing and other transforms to dataset
-        train_transform = transforms.Compose(
-            [transforms.RandomHorizontalFlip(), transforms.Resize((224, 224)), transforms.ToTensor()])
         test_transform = transforms.Compose(
             [transforms.Resize((224, 224)), transforms.ToTensor()])
         input_shape = (1, 224, 224)
+
+        # define loss function (criterion)
         criterion = torch.nn.CrossEntropyLoss()
 
-        # create dataset
-        trainset = dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'), transform=train_transform)
-        testset = dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'val'), transform=test_transform) 
+        # create dataset and augment data to prevent overfitting
+        trainset = torch.utils.data.ConcatDataset([dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=xray_transform),
+            dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=xray_jitter_brightness),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=xray_jitter_contrast),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=xray_jitter_saturation),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=xray_hflip)]
+        )
+
+        testset = dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'val'), transform=xray_transform) 
 
     if args.dataset == 'gtsrb':
         num_classes = 43
@@ -261,28 +270,32 @@ if __name__ == '__main__':
         test_transform = transforms.Compose(
             [transforms.Resize((32, 32)), transforms.ToTensor()])
         input_shape = (3, 32, 32)
+
+        # define loss function (criterion)
         criterion = torch.nn.CrossEntropyLoss()
 
         # create dataset
         # augment training set with different transforms to prevent overfitting
         trainset = torch.utils.data.ConcatDataset([dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
-            transform=data_transforms),
+            transform=gtsrb_transform),
             dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
-            transform=data_jitter_brightness),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
-            transform=data_jitter_hue),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
-            transform=data_jitter_contrast),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
-            transform=data_jitter_saturation),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
-            transform=data_translate),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
-            transform=data_rotate),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
-            transform=data_hvflip),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
-            transform=data_center),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
-            transform=data_shear)]
+            transform=gtsrb_jitter_brightness),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=gtsrb_jitter_hue),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=gtsrb_jitter_contrast),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=gtsrb_jitter_saturation),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=gtsrb_translate),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=gtsrb_rotate),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=gtsrb_hvflip),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=gtsrb_center),dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'train'),
+            transform=gtsrb_shear)]
         )
         testset = dset.ImageFolder(os.path.join(args.data_path, args.dataset, 'val'), transform=test_transform) 
 
     if args.dataset == 'stocks':
         trainset, testset = generate_stocks_dataset(os.path.join(args.data_path, args.dataset), args.stock, args.window_size)
-        optimizer = torch.nn.MSELoss()
+
+        # define loss function (criterion)
+        criterion = torch.nn.MSELoss()
 
     # initialize dataloaders
 
@@ -292,7 +305,7 @@ if __name__ == '__main__':
                             num_workers=args.workers, pin_memory=True)
 
     if args.dataset == 'stocks':
-        model = models.__dict__[args.arch](window_size=args.window_size)
+        model = models.__dict__[args.arch]()
     else:
         model = models.__dict__[args.arch](num_classes=num_classes)
 
@@ -319,8 +332,7 @@ if __name__ == '__main__':
     if -1 not in gpu_id_list:
         model = torch.nn.DataParallel(model, device_ids = gpu_id_list)
 
-    # define loss function (criterion) and optimizer
-    criterion = torch.nn.CrossEntropyLoss()
+    # define optimizer and set optimizer hyperparameters
 
     if args.optimizer == 'adam':
         optimizer = torch.optim.Adam(model.parameters(), args.learning_rate, 
@@ -354,29 +366,40 @@ if __name__ == '__main__':
 
         classifier = PyTorchClassifier(model=copy.deepcopy(model), clip_values=(0,1), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
 
+        with open('parameters/{}_parameters.json'.format(args.dataset)) as f:
+            parameter_list = json.load(f)
+
         if 'fgsm' in attack_name_list:
-            attack_list['fgsm'] = evasion.FastGradientMethod(classifier, targeted=False, eps=0.05)
+            fgsm_params = parameter_list['fgsm']
+            attack_list['fgsm'] = evasion.FastGradientMethod(classifier, targeted=fgsm_params['targeted'], eps=fgsm_params['eps'], minimal=fgsm_params['minimal'], batch_size=fgsm_params['batch_size'])
         if 'pgd' in attack_name_list:
-            attack_list['pgd'] = evasion.ProjectedGradientDescent(classifier, targeted=False, max_iter=10, eps_step=0.1, eps=0.3)
+            pgd_params = parameter_list['pgd']
+            attack_list['pgd'] = evasion.ProjectedGradientDescent(classifier, targeted=pgd_params['targeted'], 
+                max_iter=pgd_params['max_iter'], eps_step=pgd_params['eps_step'], eps=pgd_params['eps'], batch_size=pgd_params['batch_size'])
         if 'hopskipjump' in attack_name_list:
-            attack_list['hsj'] = evasion.HopSkipJump(classifier)
-        if 'query-efficient' in attack_name_list:
-            raise NotImplementedError
+            hsj_params = parameter_list['hopskipjump']
+            attack_list['hsj'] = evasion.HopSkipJump(classifier, max_iter=hsj_params['max_iter'], max_eval=hsj_params['max_eval'],
+                init_eval=hsj_params['init_eval'], targeted=hsj_params['targeted'], init_size=hsj_params['init_size'])
         if 'deepfool' in attack_name_list:
-            attack_list['deepfool'] = evasion.DeepFool(classifier)
+            fool_params = parameter_list['deepfool']
+            attack_list['deepfool'] = evasion.DeepFool(classifier, epsilon=fool_params['epsilon'], max_iter=fool_params['max_iter'], batch_size=fool_params['batch_size'], nb_grads=fool_params['nb_grads'])
 
         # initialize defenses and append to dict
 
         if 'thermometer' in defence_name_list:
-            defence_list['thermometer'] = defences.ThermometerEncoding(clip_values=(0,1)) 
+            thm_params = parameter_list['thermometer']
+            defence_list['thermometer'] = defences.ThermometerEncoding(clip_values=(thm_params['clip_min'], thm_params['clip_max']), num_space=thm_params['num_space'], channel_index=thm_params['channel_index']) 
         if 'pixeldefend' in defence_name_list:
-            defence_list['pixeldefend'] = defences.PixelDefend(clip_values=(0,1)) 
+            pixel_params = parameter_list['pixeldefend']
+            defence_list['pixeldefend'] = defences.PixelDefend(clip_values=(pixel_params['clip_min'], pixel_params['clip_min']), eps=pixel_params['eps']) 
         if 'tvm' in defence_name_list:
-            defence_list['tvm'] = defences.TotalVarMin(clip_values=(0,1))
+            tvm_params = parameter_list['tvm']
+            defence_list['tvm'] = defences.TotalVarMin(clip_values=(tvm_params['clip_min'], tvm_params['clip_max']), prob=tvm_params['prob'], lamb=tvm_params['lamb'], max_iter=tvm_params['max_iter'])
         if 'saddlepoint' in defence_name_list:
             defence_list['saddlepoint'] = defences.AdversarialTrainer(classifier, attacks=attack_list['pgd'])
         if 'jpeg' in defence_name_list:
-            defence_list['jpeg'] = defences.JpegCompression(clip_values=(0,1), channel_index=1)
+            jpeg_params = parameter_list['jpeg']
+            defence_list['jpeg'] = defences.JpegCompression(clip_values=(jpeg_params['clip_min'], jpeg_params['clip_max']), channel_index=jpeg_params['channel_index'], quality=jpeg_params['quality'])
 
         # get initial validation set accuracy
 
@@ -411,12 +434,15 @@ if __name__ == '__main__':
             print("Generating defences for attack {}: ".format(attack_name))
 
             def_adv_dict = gen_defences(test_images, adv_images, attack_name, test_labels, classifier, criterion, defence_list)
+            accuracies = {}
 
             for def_name in def_adv_dict:
                 print("Testing performance of defence {}: ".format(def_name))
-                validate(def_adv_dict[def_name], model, criterion, 1, args)
+                top1, _ = validate(def_adv_dict[def_name], model, criterion, 1, args)
                 def_images , _ = zip(*[batch for batch in def_adv_dict[def_name]])
                 def_images = torch.cat(def_images).numpy()
+
+                accuracies[def_name] = top1
 
                 # save def images for visualization purposes
                 if args.dataset == 'xrays' or args.dataset == 'gtsrb':
@@ -424,6 +450,8 @@ if __name__ == '__main__':
                     images, _ = dataiter.next()
                     img_grid = utils.make_grid(images)
                     summary.add_image("Defense {} against Attack {}".format(def_name, attack_name), img_grid)
+
+            print(accuracies)
 
     if args.evaluate:
         validate(test_loader, model, criterion, 1, args)
