@@ -152,6 +152,8 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
+        self.i_defender = None
+
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
@@ -201,18 +203,42 @@ class ResNet(nn.Module):
                 m.hidden_states = []
         return final_list
     
-    def insert_forward_hooks(self):
+    def insert_forward_hooks(self, input_shape, cuda=True):
         self.hook_list = []
 
         def hook(module, input, output):
-            module.hidden_states.append(input) #store the hidden state for each input in the fc layer
+            module.hidden_states.append(input[0].data) #store the hidden state for each input in the fc layer
 
         for i, m in enumerate(self.modules()):
             if isinstance(m, nn.Linear):
                 layer_hook = m.register_forward_hook(hook)
                 self.hook_list.append(layer_hook)
                 m.hidden_states = []
-        self.forward(torch.randn(1, 3, 224, 224, dtype=torch.float).cuda()) #add the hooks via a dry pass with random input
+        if cuda:
+            self.forward(torch.randn((2,) + input_shape, dtype=torch.float).cuda()) #add the hooks via a dry pass with random input
+        else:
+            self.forward(torch.randn((2,) + input_shape, dtype=torch.float))
+        # clear our the random input
+        self.return_hidden_state_memory()
+
+    def remove_hooks(self):
+        for hook in self.hook_list:
+            hook.remove()
+
+    def update_defender(self, defender):
+        self.i_defender = defender
+        self.is_attacked_log = []
+        self.raw_prob_log = []    
+
+    def fetch_attack_log(self):
+        return_val = self.is_attacked_log
+        self.is_attacked_log = []
+        return return_val
+
+    def fetch_raw_probs(self):
+        return_val = self.raw_prob_log
+        self.raw_prob_log = []
+        return return_val
 
     def _forward_impl(self, x):
         # See note [TorchScript super()]
@@ -228,8 +254,20 @@ class ResNet(nn.Module):
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
+        hidden_state = x
         x = self.fc(x)
-
+        predictions = torch.argmax(x, 1)
+        if self.i_defender is not None:
+            is_attacked = []
+            prob_log = []
+            attack_num = 0
+            for state, pred in zip(hidden_state, predictions):
+                attacked, log_prob = self.i_defender.estimate(state.unsqueeze(0), pred)
+                is_attacked.append(attacked)
+                prob_log.append(log_prob)
+                attack_num += attacked
+            self.is_attacked_log.append(is_attacked)
+            self.raw_prob_log.append(prob_log)
         return x
 
     def forward(self, x):

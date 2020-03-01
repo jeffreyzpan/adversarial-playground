@@ -48,5 +48,11 @@
         "clip_max": 1,
         "channel_index": 1,
         "quality": 50
+    },
+    "i_defender":{
+        "p_value": 0.03,
+        "n_components": 15,
+        "max_iter": 100,
+        "n_init": 5
     }
 }
