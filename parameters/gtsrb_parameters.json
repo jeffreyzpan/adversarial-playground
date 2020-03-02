@@ -50,7 +50,7 @@
         "quality": 80
     },
     "i_defender":{
-        "p_value": 0.03,
+        "p_value": 2705,
         "n_components": 30,
         "max_iter": 100,
         "n_init": 1

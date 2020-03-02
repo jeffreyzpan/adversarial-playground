@@ -423,8 +423,6 @@ if __name__ == '__main__':
                 clean_num = sum(clean_log)
                 accuracies['i_defender_attacked'] = float(attack_num/len(adv_dict[attack_name].dataset))
                 accuracies['i_defender_clean'] = float(1-clean_num/len(test_loader.dataset))
-                import pdb
-                pdb.set_trace()
 
             if 'adv_training' in defence_name_list or 'thermometer' in defence_name_list:
                 # attack training set images with attack and save it to a dataloader
