@@ -14,7 +14,7 @@ This repo requires the following dependencies:
 - [Sklearn](https://scikit-learn.org/stable/index.html)
 - [ART](https://github.com/IBM/adversarial-robustness-toolbox)
 - [TensorboardX](https://github.com/lanpa/tensorboardX)
-- [Librosa] (https://librosa.github.io/librosa/)
+- [Librosa](https://librosa.github.io/librosa/)
 
 Additionally, I evaluate on the following datasets:
 
