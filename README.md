@@ -14,12 +14,13 @@ This repo requires the following dependencies:
 - [Sklearn](https://scikit-learn.org/stable/index.html)
 - [ART](https://github.com/IBM/adversarial-robustness-toolbox)
 - [TensorboardX](https://github.com/lanpa/tensorboardX)
+- [Librosa] (https://librosa.github.io/librosa/)
 
 Additionally, I evaluate on the following datasets:
 
 - [Chest X-Rays](https://www.kaggle.com/paultimothymooney/chest-xray-pneumonia)
 - [GTSRB](https://www.kaggle.com/meowmeowmeowmeowmeow/gtsrb-german-traffic-sign)
-- [Kaggle Stock Market](https://www.kaggle.com/borismarjanovic/price-volume-data-for-all-us-stocks-etfs)
+- [UrbanSound8K](https://urbansounddataset.weebly.com/urbansound8k.html)
 
 ## Attacks and Defenses
 
@@ -29,14 +30,11 @@ Attacks
 
 - [FGSM](https://arxiv.org/abs/1412.6572)
 - [PGD](https://arxiv.org/abs/1706.06083)
-- [Query-Efficient Black Box Attacks](https://arxiv.org/pdf/1804.08598.pdf)
-- [HopSkipJump](https://arxiv.org/abs/1904.02144v4)
 - [DeepFool](https://arxiv.org/abs/1511.04599)
 
 Defenses
 
 - Adversarial training
-- [PixelDefend](https://arxiv.org/abs/1710.10766)
 - [I-Defender](https://papers.nips.cc/paper/8016-robust-detection-of-adversarial-attacks-by-modeling-the-intrinsic-properties-of-deep-neural-networks.pdf)
-- [Thermometer Encoding](https://openreview.net/pdf?id=S18Su--CW)
 - [Total Variance Minimization](https://arxiv.org/abs/1711.00117)
+- [JPEG Compression](https://arxiv.org/abs/1711.00117)
