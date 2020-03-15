@@ -257,9 +257,10 @@ if __name__ == '__main__':
         # define loss function (criterion)
         criterion = torch.nn.CrossEntropyLoss()
 
-    if args.dataset == 'stocks':
-        #trainset, testset = generate_stocks_dataset(os.path.join(args.data_path, args.dataset), args.stock, args.window_size)
-        raise NotImplementedError
+    if args.dataset == 'imagenet':
+        num_classes = 1000
+        input_shape = (3, 224, 224)
+        
 
     if args.dataset == 'urbansound8k':
         num_classes = 10
