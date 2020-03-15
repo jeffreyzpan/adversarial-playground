@@ -12,6 +12,7 @@ from lib.utils.utils import *
 from lib.datasets.load_urbansound import load_mfcc_dataset, load_envnet_dataset
 from lib.datasets.load_xrays import create_xrays_dataset
 from lib.datasets.load_gtsrb import create_gtsrb_dataset
+from lib.datasets.data_utils import generate_dataset
 from lib.adversarial.adversarial import * 
 
 from art.classifiers import PyTorchClassifier
@@ -26,7 +27,7 @@ model_names = sorted(name for name in models.__dict__
 
 parser = argparse.ArgumentParser(description='Adversarial Training Benchmarking', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--data_path', type=str, default='/nobackup/users/jzpan/datasets', help='path to dataset')
-parser.add_argument('--dataset', type=str, choices=['urbansound8k', 'xrays', 'gtsrb', 'esc'], help='choose dataset to benchmark adversarial training techniques on.')
+parser.add_argument('--dataset', type=str, help='choose dataset to benchmark adversarial training techniques on.')
 parser.add_argument('--fold', type=int, help='if evaluating urbansound dataset, fold number to use for validation')
 parser.add_argument('--arch', metavar='ARCH', default='resnet50', help='model architecture: to evaluate robustness on (default: resnet50)')
 parser.add_argument('--workers', type=int, default=16, help='number of data loading workers to use')
@@ -35,11 +36,13 @@ parser.add_argument('--gpu_ids', type=str, default='0,1,2,3', help='comma-sepera
 # Hyperparameters
 parser.add_argument('--epochs', type=int, default=100, help='number of epochs to train for')
 parser.add_argument('--optimizer', type=str, default='sgd', help='optimizer to use')
-parser.add_argument('--batch_size', type=int, default=256, help='batch size')
+parser.add_argument('--batch_size', type=int, default=128, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.1, help='learning rate')
 parser.add_argument('--cosine', action='store_true', help='use cosine annealing schedule to decay learning rate')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
-parser.add_argument('--weight_decay', type=float, default=0.0005, help='weight decay')
+parser.add_argument('--weight_decay', type=float, default=0.0001, help='weight decay')
+parser.add_argument('--schedule', type=int, nargs='+', default=[83,123], help='list of epochs to reduce lr at')
+parser.add_argument('--gammas', type=float, nargs='+', default=[0.1, 0.1], help='list of gammas to multiply with lr at each scheduled epoch; length of gammas should be the same as length of schedule')
 
 # Model checkpoint flags
 parser.add_argument('--print_freq', type=int, default=200, metavar='N', help='print frequency (default: 200)')
@@ -62,24 +65,12 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
-    if args.dataset == 'stocks':
-        progress = ProgressMeter(
-            len(train_loader),
-            [batch_time, data_time, losses])
-
     top1 = AverageMeter('Acc@1', ':6.2f')
-
-    if args.dataset == 'gtsrb' or args.dataset == 'urbansound8k':
-        top5 = AverageMeter('Acc@5', ':6.2f')
-        progress = ProgressMeter(
-            len(train_loader),
-            [batch_time, data_time, losses, top1, top5],
-            prefix="Epoch: [{}]".format(epoch))
-    else:
-        progress = ProgressMeter(
-            len(train_loader),
-            [batch_time, data_time, losses, top1],
-            prefix="Epoch: [{}]".format(epoch))
+    top5 = AverageMeter('Acc@5', ':6.2f')
+    progress = ProgressMeter(
+        len(train_loader),
+        [batch_time, data_time, losses, top1, top5],
+        prefix="Epoch: [{}]".format(epoch))
 
     # switch to train mode
     model.train()
@@ -97,14 +88,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         output = model(inputs)
         loss = criterion(output, target)
         # measure accuracy and record loss
-        if args.dataset == 'xrays':
-            acc1, _ = accuracy(output, target, topk=(1, 1))
-        else:
-            acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        acc1, acc5 = accuracy(output, target, topk=(1, 5))
         losses.update(loss.item(), inputs.size(0))
         top1.update(acc1[0], inputs.size(0))
-        if args.dataset != 'xrays':
-            top5.update(acc5[0], inputs.size(0))
+        top5.update(acc5[0], inputs.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -118,38 +105,20 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         if i % args.print_freq == 0:
             progress.display(i)
 
-    if args.dataset == 'stocks':
-        summary.add_scalar('mse loss', losses.avg, epoch)
-    elif args.dataset == 'gtsrb' or args.dataset == 'urbansound8k': 
-        summary.add_scalar('train acc5', top5.avg, epoch)
-        summary.add_scalar('train acc1', top1.avg, epoch)
-        summary.add_scalar('train loss', losses.avg, epoch)
-    elif args.dataset == 'xrays':
-        summary.add_scalar('train acc1', top1.avg, epoch)
-        summary.add_scalar('train loss', losses.avg, epoch)
+    summary.add_scalar('train acc5', top5.avg, epoch)
+    summary.add_scalar('train acc1', top1.avg, epoch)
+    summary.add_scalar('train loss', losses.avg, epoch)
 
 
 def validate(val_loader, model, criterion, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
-
-    if args.dataset == 'stocks':
-        progress = ProgressMeter(
-            len(train_loader),
-            [batch_time, data_time, losses])
-
-    if args.dataset == 'gtsrb' or args.dataset == 'urbansound8k':
-        top5 = AverageMeter('Acc@5', ':6.2f')
-        progress = ProgressMeter(
-            len(val_loader),
-            [batch_time, losses, top1, top5],
-            prefix="Test: ")
-    else:
-        progress = ProgressMeter(
-            len(val_loader),
-            [batch_time, losses, top1],
-            prefix="Test: ")
+    top5 = AverageMeter('Acc@5', ':6.2f')
+    progress = ProgressMeter(
+        len(val_loader),
+        [batch_time, losses, top1, top5],
+        prefix="Test: ")
 
     # switch to evaluate mode
     model.eval()
@@ -166,14 +135,10 @@ def validate(val_loader, model, criterion, epoch, args):
             loss = criterion(output, target)
 
             # measure accuracy and record loss
-            if args.dataset == 'xrays':
-                acc1, _ = accuracy(output, target, topk=(1, 1))
-            else:
-                acc1, acc5 = accuracy(output, target, topk=(1, 5))
+            acc1, acc5 = accuracy(output, target, topk=(1, 5))
             losses.update(loss.item(), inputs.size(0))
             top1.update(acc1[0], inputs.size(0))
-            if args.dataset != 'xrays':
-                top5.update(acc5[0], inputs.size(0))
+            top5.update(acc5[0], inputs.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -183,22 +148,12 @@ def validate(val_loader, model, criterion, epoch, args):
                 progress.display(i)
 
         # TODO: this should also be done with the ProgressMeter
-        if args.dataset == 'stocks':
-            print(' * MSE Loss {losses.avg:.3f}'
-                 .format(losses=losses))
-        else:
-            print(' * Acc@1 {top1.avg:.3f}'
-                 .format(top1=top1))
+        print(' * Acc@1 {top1.avg:.3f}'
+             .format(top1=top1))
 
-    if args.dataset == 'stocks':
-        summary.add_scalar('mse loss', losses.avg, epoch)
-    elif args.dataset == 'gtsrb' or args.dataset == 'urbansound8k': 
-        summary.add_scalar('test acc5', top5.avg, epoch)
-        summary.add_scalar('test acc1', top1.avg, epoch)
-        summary.add_scalar('test loss', losses.avg, epoch)
-    elif args.dataset == 'xrays':
-        summary.add_scalar('test acc1', top1.avg, epoch)
-        summary.add_scalar('test loss', losses.avg, epoch)
+    summary.add_scalar('test acc5', top5.avg, epoch)
+    summary.add_scalar('test acc1', top1.avg, epoch)
+    summary.add_scalar('test loss', losses.avg, epoch)
 
     #visualize a batch of testing images
     if args.dataset == 'xrays' or args.dataset == 'gtsrb':
@@ -207,10 +162,20 @@ def validate(val_loader, model, criterion, epoch, args):
         img_grid = utils.make_grid(images)
         summary.add_image("Validation Images", img_grid)
 
-    if args.dataset == 'stocks':
-        return losses.avg, losses.avg
-    else:
-        return top1.avg, losses.avg
+    return top1.avg, losses.avg
+
+def adjust_learning_rate(optimizer, epoch, gammas, schedule):
+    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+    lr = args.learning_rate
+    assert len(gammas) == len(schedule), "length of gammas and schedule should be equal"
+    for (gamma, step) in zip(gammas, schedule):
+        if (epoch >= step):
+            lr = lr * gamma
+        else:
+            break
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+    return lr
 
 
 if __name__ == '__main__':
@@ -239,6 +204,16 @@ if __name__ == '__main__':
     assert args.arch in model_names, 'Error: model {} not supported'.format(args.arch)
 
     # set variables based on dataset to evaluate on
+    if args.dataset == 'imagenet':
+        input_size = 224
+    elif args.dataset == 'cifar10' or args.dataset == 'cifar100':
+        input_size = 32
+    elif args.dataset == 'mnist' or args.dataset == 'fmnist':
+        input_size = 28
+
+    criterion = torch.nn.CrossEntropyLoss()
+    train_loader, test_loader, num_classes = generate_dataset(args.dataset, args.data_path, input_size, args.batch_size, args.workers)
+    '''
     if args.dataset == 'xrays':
         num_classes = 2
         # apply resizing and other transforms to dataset
@@ -257,11 +232,6 @@ if __name__ == '__main__':
         # define loss function (criterion)
         criterion = torch.nn.CrossEntropyLoss()
 
-    if args.dataset == 'imagenet':
-        num_classes = 1000
-        input_shape = (3, 224, 224)
-        
-
     if args.dataset == 'urbansound8k':
         num_classes = 10
         if args.arch == 'audio_lstm':
@@ -273,13 +243,13 @@ if __name__ == '__main__':
             input_shape = (1, 1, 66650)
         # define loss function (criterion)
         criterion = torch.nn.CrossEntropyLoss()
-
+    '''
     # initialize dataloaders
 
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True,
-                            num_workers=args.workers, pin_memory=True)
-    test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False,
-                            num_workers=args.workers, pin_memory=True)
+    #train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True,
+    #                        num_workers=args.workers, pin_memory=True)
+    #test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False,
+    #                        num_workers=args.workers, pin_memory=True)
 
     model = models.__dict__[args.arch](num_classes=num_classes)
 
@@ -479,8 +449,9 @@ if __name__ == '__main__':
     if args.train:
         for epoch in range(args.epochs):
 
+            # adjust lr using schedule for sgd
             if args.optimizer == 'sgd': 
-                adjust_learning_rate(optimizer, epoch, args)
+                adjust_learning_rate(optimizer, epoch, args.gammas, args.schedule)
 
             # train for one epoch
             train(train_loader, model, criterion, optimizer, epoch, args)
@@ -488,6 +459,7 @@ if __name__ == '__main__':
             # evaluate on validation set
             acc1, val_loss = validate(test_loader, model, criterion, epoch, args)
 
+            # adjust lr using ReduceLROnPlateau scheduler for adam
             if args.optimizer == 'adam':
                 scheduler.step(np.around(val_loss,2))
 

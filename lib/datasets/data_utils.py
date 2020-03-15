@@ -10,8 +10,8 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
 
     print('==> Loading dataset {}...'.format(name))
     if name == 'imagenet':
-        train_path = os.path.join(path, 'train')
-        val_path = os.path.join(path, 'val')
+        train_path = os.path.join(path, name, 'train')
+        val_path = os.path.join(path, name, 'val')
         assert os.path.exists(train_path), train_path + ' not found'
         assert os.path.exists(val_path), val_path + ' not found'
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -26,7 +26,7 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
                     normalize,
                 ])),
             batch_size=batch_size, shuffle=True,
-            num_workers=n_worker, pin_memory=True)
+            num_workers=num_workers, pin_memory=True)
 
         val_loader = data.DataLoader(
             datasets.ImageFolder(val_path, transforms.Compose([
@@ -36,7 +36,7 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
                 normalize,
             ])),
             batch_size=batch_size, shuffle=False,
-            num_workers=n_worker, pin_memory=True)
+            num_workers=num_workers, pin_memory=True)
 
         n_class = 1000
 
@@ -53,7 +53,7 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
                     normalize,
                 ])),
             batch_size=batch_size, shuffle=True,
-            num_workers=n_worker, pin_memory=True)
+            num_workers=num_workers, pin_memory=True)
 
         val_loader = data.DataLoader(
             datasets.CIFAR10(path, False, transforms.Compose([
@@ -63,7 +63,7 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
                 normalize,
             ])),
             batch_size=batch_size, shuffle=False,
-            num_workers=n_worker, pin_memory=True)
+            num_workers=num_workers, pin_memory=True)
 
         n_class = 10
 
@@ -80,7 +80,7 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
                     normalize,
                 ])),
             batch_size=batch_size, shuffle=True,
-            num_workers=n_worker, pin_memory=True)
+            num_workers=num_workers, pin_memory=True)
 
         val_loader = data.DataLoader(
             datasets.CIFAR100(path, False, transforms.Compose([
@@ -90,7 +90,7 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
                 normalize,
             ])),
             batch_size=batch_size, shuffle=False,
-            num_workers=n_worker, pin_memory=True)
+            num_workers=num_workers, pin_memory=True)
 
         n_class = 100
 
@@ -106,7 +106,7 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
                     normalize,
                 ])),
             batch_size=batch_size, shuffle=True,
-            num_workers=n_worker, pin_memory=True)
+            num_workers=num_workers, pin_memory=True)
 
         val_loader = data.DataLoader(
             datasets.MNIST(path, False, transforms.Compose([
@@ -116,7 +116,7 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
                 normalize,
             ])),
             batch_size=batch_size, shuffle=False,
-            num_workers=n_worker, pin_memory=True)
+            num_workers=num_workers, pin_memory=True)
 
         n_class = 10
 
@@ -132,7 +132,7 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
                     normalize,
                 ])),
             batch_size=batch_size, shuffle=True,
-            num_workers=n_worker, pin_memory=True)
+            num_workers=num_workers, pin_memory=True)
 
         val_loader = data.DataLoader(
             datasets.FashionMNIST(path, False, transforms.Compose([
@@ -142,7 +142,7 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
                 normalize,
             ])),
             batch_size=batch_size, shuffle=False,
-            num_workers=n_worker, pin_memory=True)
+            num_workers=num_workers, pin_memory=True)
 
         n_class = 10
     else:
