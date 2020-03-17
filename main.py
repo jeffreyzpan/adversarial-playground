@@ -463,32 +463,16 @@ if __name__ == '__main__':
             if args.optimizer == 'adam':
                 scheduler.step(np.around(val_loss,2))
 
-            if args.dataset == 'gtsrb' or args.dataset == 'xrays' or args.dataset == 'urbansound8k':
-
-                # remember best acc@1 and save checkpoint
-                is_best = acc1 > best_acc1
-                best_acc1 = max(acc1, best_acc1)
+            # remember best acc@1 and save checkpoint
+            is_best = acc1 > best_acc1
+            best_acc1 = max(acc1, best_acc1)
         
-                save_checkpoint({
-                            'epoch': epoch + 1,
-                            'arch': args.arch,
-                            'state_dict': model.state_dict(),
-                            'best_acc1': best_acc1,
-                            'optimizer' : optimizer.state_dict(),
-                        }, is_best, args.save_path)
-
-            elif args.dataset == 'stocks':
-                
-                #remember lowest loss and save checkpoint
-                is_best = val_loss < best_loss
-                best_acc1 = min(val_loss, best_loss)
-        
-                save_checkpoint({
-                            'epoch': epoch + 1,
-                            'arch': args.arch,
-                            'state_dict': model.state_dict(),
-                            'best_loss': best_loss,
-                            'optimizer' : optimizer.state_dict(),
-                        }, is_best, args.save_path)
+            save_checkpoint({
+                        'epoch': epoch + 1,
+                        'arch': args.arch,
+                        'state_dict': model.state_dict(),
+                        'best_acc1': best_acc1,
+                        'optimizer' : optimizer.state_dict(),
+                    }, is_best, args.save_path)
 
     summary.close()

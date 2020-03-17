@@ -42,8 +42,8 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
 
     elif name == 'cifar10':
         assert os.path.exists(path), path + ' not found'
-        normalize = transforms.Normalize(mean=[0.491, 0.482, 0.447],
-                                         std=[0.247, 0.244, 0.262])
+        normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                         std=[0.2023, 0.1994, 0.2010])
         train_loader = data.DataLoader(
             datasets.CIFAR10(
                 path, True, transforms.Compose([
@@ -57,8 +57,6 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
 
         val_loader = data.DataLoader(
             datasets.CIFAR10(path, False, transforms.Compose([
-                transforms.Resize(int(input_size / 0.875)),
-                transforms.CenterCrop(input_size),
                 transforms.ToTensor(),
                 normalize,
             ])),
@@ -69,13 +67,14 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
 
     elif name == 'cifar100':
         assert os.path.exists(path), path + ' not found'
-        normalize = transforms.Normalize(mean=[0.507, 0.487, 0.441],
-                                         std=[0.267, 0.256, 0.276])
+        normalize = transforms.Normalize(mean=[0.5070751592371323, 0.48654887331495095, 0.4409178433670343],
+                                         std=[0.2673342858792401, 0.2564384629170883, 0.27615047132568404])
         train_loader = data.DataLoader(
             datasets.CIFAR100(
                 path, True, transforms.Compose([
                     transforms.RandomResizedCrop(input_size),
                     transforms.RandomHorizontalFlip(),
+                    transforms.RandomRotation(15),
                     transforms.ToTensor(),
                     normalize,
                 ])),
@@ -84,8 +83,6 @@ def generate_dataset(name, path, input_size, batch_size, num_workers):
 
         val_loader = data.DataLoader(
             datasets.CIFAR100(path, False, transforms.Compose([
-                transforms.Resize(int(input_size / 0.875)),
-                transforms.CenterCrop(input_size),
                 transforms.ToTensor(),
                 normalize,
             ])),
