@@ -18,6 +18,8 @@ from lib.adversarial.adversarial import *
 from art.classifiers import PyTorchClassifier
 import art.attacks.evasion as evasion
 import art.defences as defences
+import advertorch.attacks as attacks
+import advertorch.defences as defenses
 import numpy as np
 
 #get list of valid models from custom models directory
@@ -308,18 +310,18 @@ if __name__ == '__main__':
 
         # initialize attacks and append to dict
 
-        classifier = PyTorchClassifier(model=copy.deepcopy(model), clip_values=(0,1), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
+        #classifier = PyTorchClassifier(model=copy.deepcopy(model), clip_values=(0,1), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
 
         with open('parameters/{}_parameters.json'.format(args.dataset)) as f:
             parameter_list = json.load(f)
 
         if 'fgsm' in attack_name_list:
             fgsm_params = parameter_list['fgsm']
-            attack_list['fgsm'] = evasion.FastGradientMethod(classifier, targeted=fgsm_params['targeted'], eps=fgsm_params['eps'], minimal=fgsm_params['minimal'], batch_size=fgsm_params['batch_size'])
+            attack_list['fgsm'] = attacks.GradientSignAttack(model, loss_fn=criterion, eps=fgsm_paras['eps'], clip_min=0.0, clip_max=1.0, targeted=False)
+
         if 'pgd' in attack_name_list:
             pgd_params = parameter_list['pgd']
-            attack_list['pgd'] = evasion.ProjectedGradientDescent(classifier, targeted=pgd_params['targeted'], 
-                max_iter=pgd_params['max_iter'], eps_step=pgd_params['eps_step'], eps=pgd_params['eps'], batch_size=pgd_params['batch_size'])
+            attack_list['pgd'] = attacks.PGDAttack(model, loss_fn=criterion, eps=pgd_params['eps'], eps_iter=pgd_params['eps_step'], targeted=pgd_params['targeted'], 
         if 'deepfool' in attack_name_list:
             fool_params = parameter_list['deepfool']
             attack_list['deepfool'] = evasion.DeepFool(classifier, epsilon=fool_params['epsilon'], max_iter=fool_params['max_iter'], batch_size=fool_params['batch_size'], nb_grads=fool_params['nb_grads'])
