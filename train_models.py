@@ -9,17 +9,8 @@ import torchvision.utils as utils
 from torch.utils.tensorboard import SummaryWriter
 import lib.models as models
 from lib.utils.utils import *
-from lib.datasets.load_urbansound import load_mfcc_dataset, load_envnet_dataset
-from lib.datasets.load_xrays import create_xrays_dataset
-from lib.datasets.load_gtsrb import create_gtsrb_dataset
 from lib.datasets.data_utils import generate_dataset
-from lib.adversarial.adversarial import * 
 
-from art.classifiers import PyTorchClassifier
-import art.attacks.evasion as evasion
-import art.defences as defences
-import advertorch.attacks as attacks
-import advertorch.defenses as defenses
 import numpy as np
 
 #get list of valid models from custom models directory
@@ -27,11 +18,11 @@ model_names = sorted(name for name in models.__dict__
   if name.islower() and not name.startswith("__")
   and callable(models.__dict__[name]))
 
-parser = argparse.ArgumentParser(description='Adversarial Training Benchmarking', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser = argparse.ArgumentParser(description='Train Models from Scratch', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--data_path', type=str, default='/nobackup/users/jzpan/datasets', help='path to dataset')
 parser.add_argument('--dataset', type=str, help='choose dataset to benchmark adversarial training techniques on.')
 parser.add_argument('--fold', type=int, help='if evaluating urbansound dataset, fold number to use for validation')
-parser.add_argument('--arch', metavar='ARCH', default='resnet50', help='model architecture: to evaluate robustness on (default: resnet50)')
+parser.add_argument('--arch', metavar='ARCH', default='resnet18', help='model architecture: to evaluate robustness on (default: resnet50)')
 parser.add_argument('--workers', type=int, default=16, help='number of data loading workers to use')
 parser.add_argument('--pretrained', type=str, default='', help='path to pretrained model')
 parser.add_argument('--gpu_ids', type=str, default='0,1,2,3', help='comma-seperated string of gpu ids to use for acceleration (-1 for cpu only)')
@@ -53,11 +44,6 @@ parser.add_argument('--train', action='store_true', help='train the model')
 parser.add_argument('--resume', type=str, default=None, metavar='PATH', help='path to latest checkpoint (default: none)')
 parser.add_argument('--start_epoch', type=int, default=0, metavar='N', help='manual epoch number (useful on restarts)')
 parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
-
-# Experiments
-parser.add_argument('--eval_attacks', action='store_true', help='evaluate attacks on model')
-parser.add_argument('--attacks', type=str, default='fgsm,pgd,deepfool', help='comma seperated string of attacks to evaluate')
-parser.add_argument('--defences', type=str, default='jpeg,tvm,i_defender,adv_training', help='comma seperated string of defences to evaluate')
 
 global best_acc1, best_loss
 
@@ -111,7 +97,6 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     summary.add_scalar('train acc1', top1.avg, epoch)
     summary.add_scalar('train loss', losses.avg, epoch)
 
-
 def validate(val_loader, model, criterion, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -157,13 +142,6 @@ def validate(val_loader, model, criterion, epoch, args):
     summary.add_scalar('test acc1', top1.avg, epoch)
     summary.add_scalar('test loss', losses.avg, epoch)
 
-    #visualize a batch of testing images
-    if args.dataset == 'xrays' or args.dataset == 'gtsrb':
-        dataiter = iter(val_loader)
-        images, _ = dataiter.next()
-        img_grid = utils.make_grid(images)
-        summary.add_image("Validation Images", img_grid)
-
     return top1.avg, losses.avg
 
 def adjust_learning_rate(optimizer, epoch, gammas, schedule):
@@ -178,7 +156,6 @@ def adjust_learning_rate(optimizer, epoch, gammas, schedule):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     return lr
-
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -206,12 +183,14 @@ if __name__ == '__main__':
     assert args.arch in model_names, 'Error: model {} not supported'.format(args.arch)
 
     # set variables based on dataset to evaluate on
-    if args.dataset == 'imagenet':
+    if args.dataset in ['imagenet', 'xrays']:
         input_size = 224
-    elif args.dataset == 'cifar10' or args.dataset == 'cifar100':
+    elif args.dataset in ['cifar10', 'cifar100', 'gtsrb']:
         input_size = 32
     elif args.dataset == 'mnist' or args.dataset == 'fmnist':
         input_size = 28
+    else:
+        raise NotImplementedError
 
     criterion = torch.nn.CrossEntropyLoss()
     train_loader, test_loader, num_classes = generate_dataset(args.dataset, args.data_path, input_size, args.batch_size, args.workers)
@@ -259,154 +238,6 @@ if __name__ == '__main__':
         criterion.cuda()
 
     cudnn.benchmark = True
-
-    # perform attacks and defences on dataset
-    if args.eval_attacks:
-        attack_name_list = args.attacks.split(',')
-        attack_name_list = [i.strip().lower() for i in attack_name_list] #sanitize inputs
-
-        defence_name_list = args.defences.split(',')
-        defence_name_list = [i.strip().lower() for i in defence_name_list] #sanitize inputs
-
-        attack_list = {}
-        defence_list = {}
-
-        # initialize attacks and append to dict
-
-        #classifier = PyTorchClassifier(model=copy.deepcopy(model), clip_values=(0,1), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes) 
-
-        with open('parameters/{}_parameters.json'.format(args.dataset)) as f:
-            parameter_list = json.load(f)
-
-        if 'fgsm' in attack_name_list:
-            fgsm_params = parameter_list['fgsm']
-            attack_list['fgsm'] = attacks.GradientSignAttack(model, loss_fn=criterion, eps=fgsm_paras['eps'], clip_min=0.0, clip_max=1.0, targeted=False)
-
-        if 'pgd' in attack_name_list:
-            pgd_params = parameter_list['pgd']
-            attack_list['pgd'] = attacks.PGDAttack(model, loss_fn=criterion, eps=pgd_params['eps'], eps_iter=pgd_params['eps_step'], targeted=pgd_params['targeted']) 
-        if 'deepfool' in attack_name_list:
-            fool_params = parameter_list['deepfool']
-            attack_list['deepfool'] = evasion.DeepFool(classifier, epsilon=fool_params['epsilon'], max_iter=fool_params['max_iter'], batch_size=fool_params['batch_size'], nb_grads=fool_params['nb_grads'])
-
-        # initialize defenses and append to dict
-
-        if 'pixeldefend' in defence_name_list:
-            pixel_params = parameter_list['pixeldefend']
-            defence_list['pixeldefend'] = defences.PixelDefend(clip_values=(pixel_params['clip_min'], pixel_params['clip_min']), eps=pixel_params['eps']) 
-        if 'tvm' in defence_name_list:
-            tvm_params = parameter_list['tvm']
-            defence_list['tvm'] = defences.TotalVarMin(clip_values=(tvm_params['clip_min'], tvm_params['clip_max']), prob=tvm_params['prob'], lamb=tvm_params['lamb'], max_iter=tvm_params['max_iter'])
-        if 'jpeg' in defence_name_list:
-            jpeg_params = parameter_list['jpeg']
-            defence_list['jpeg'] = defences.JpegCompression(clip_values=(jpeg_params['clip_min'], jpeg_params['clip_max']), channel_index=jpeg_params['channel_index'], quality=jpeg_params['quality'])
-        if 'i_defender' in defence_name_list:
-            model.module.insert_forward_hooks(input_shape, cuda=True)
-            i_params = parameter_list['i_defender']
-            defense_model = models.__dict__['i_defender'](model, train_loader, num_classes, i_params['p_value'], n_components=i_params['n_components'], max_iter=i_params['max_iter'], n_init=i_params['n_init'])
-            model.module.remove_hooks()
-
-        # get initial validation set accuracy
-
-        initial_acc, _ = validate(test_loader, model, criterion, 1, args)
-
-        # ART appears to only support numpy arrays, so convert dataloader into a numpy array of images
-        image_batches, label_batches = zip(*[batch for batch in test_loader])
-        test_images = torch.cat(image_batches).numpy()
-        test_labels = torch.cat(label_batches).numpy()
-
-        adv_dict = gen_attacks(test_images, test_labels, classifier, criterion, attack_list)
-
-        # loop through all generated dataloaders with adversarial images
-        results_dict = {}
-        for attack_name in adv_dict:
-
-            #measure attack success
-            print("Testing performance of attack {}: ".format(attack_name))
-            attacked_acc, _ = validate(adv_dict[attack_name], model, criterion, 1, args)
-
-            adv_images, adv_labels = zip(*[batch for batch in adv_dict[attack_name]])
-            adv_images = torch.cat(adv_images).numpy()
-            adv_labels = torch.cat(adv_labels).numpy()
-
-            # save adv images for visualization purposes
-            if args.dataset == 'xrays' or args.dataset == 'gtsrb':
-                dataiter = iter(adv_dict[attack_name])
-                images, _ = dataiter.next()
-                img_grid = utils.make_grid(images)
-                summary.add_image("Training Images Adversarially Attacked Using {}".format(attack_name), img_grid)
-
-            print("Generating defences for attack {}: ".format(attack_name))
-
-            def_adv_dict = gen_defences(test_images, adv_images, attack_name, test_labels, classifier, criterion, defence_list)
-            accuracies = {'initial': initial_acc.item(), 'attacked': attacked_acc.item()}
-
-            if 'i_defender' in defence_name_list: 
-                model.module.update_defender(defense_model)
-                validate(adv_dict[attack_name], model, criterion, 1, args)
-                raw_attack_log = model.module.fetch_attack_log()
-                attack_log_probs = model.module.fetch_raw_probs()
-                # flatten attack log into 1D list
-                attack_log = np.array([j for sub_list in raw_attack_log for j in sub_list])
-                attack_log_probs = np.array([j for sub_list in attack_log_probs for j in sub_list])
-                validate(test_loader, model, criterion, 1, args)
-                raw_clean_log = model.module.fetch_attack_log()
-                clean_log_probs = model.module.fetch_raw_probs()
-                # flatten attack log into 1D list
-                clean_log = np.array([j for sub_list in raw_clean_log for j in sub_list])
-                clean_log_probs = np.array([j for sub_list in clean_log_probs for j in sub_list])
-                attack_num = sum(attack_log)
-                clean_num = sum(clean_log)
-                accuracies['i_defender_attacked'] = float(attack_num/len(adv_dict[attack_name].dataset))
-                accuracies['i_defender_clean'] = float(1-clean_num/len(test_loader.dataset))
-
-            if 'adv_training' in defence_name_list or 'thermometer' in defence_name_list:
-                # attack training set images with attack and save it to a dataloader
-                if 'adv_training' in defence_name_list:
-                    print('Generating adversarial examples on training data')
-                    adv_loader = adversarial_retraining(train_loader, attack_list[attack_name])
-                    robust_model = copy.deepcopy(model)
-                    epochs = 20
-                    top1 = 0
-                    for epoch in range(epochs):
-                        train(adv_loader, robust_model, criterion, optimizer, epoch, args)
-                        acc1, val_loss = validate(adv_dict[attack_name], robust_model, criterion, epoch, args)
-                        top1 = max(top1, acc1)
-                    accuracies['adv_training'] = acc1.item()
-
-                if 'thermometer' in defence_name_list:
-
-                    clean_encoded_loader, adv_encoded_loader = thermometer_encoding(train_loader, adv_dict[attack_name], parameter_list['thermometer']) 
-
-                    enc_model = copy.deepcopy(model)
-                    epochs = 20
-                    top1 = 0
-
-                    for epoch in range(epochs):
-                        train(clean_encoded_loader, enc_model, criterion, optimizer, epoch, args)
-                        acc1, val_loss = validate(adv_encoded_loader, enc_model, criterion, epoch, args)
-                        top1 = max(top1, acc1)
-                    accuracies['thermometer'] = acc1.item()
-
-            for def_name in def_adv_dict:
-                print("Testing performance of defence {}: ".format(def_name))
-                top1, _ = validate(def_adv_dict[def_name], model, criterion, 1, args)
-                def_images , _ = zip(*[batch for batch in def_adv_dict[def_name]])
-                def_images = torch.cat(def_images).numpy()
-
-                accuracies[def_name] = top1.item()
-
-                # save def images for visualization purposes
-                if args.dataset == 'xrays' or args.dataset == 'gtsrb':
-                    dataiter = iter(def_adv_dict[def_name])
-                    images, _ = dataiter.next()
-                    img_grid = utils.make_grid(images)
-                    summary.add_image("Defense {} against Attack {}".format(def_name, attack_name), img_grid)
-
-            results_dict[attack_name] = accuracies
-        print(results_dict)
-        with open(os.path.join(args.save_path, 'results.json'), 'w') as save_file:
-            json.dump(results_dict, save_file)
 
     if args.evaluate:
         validate(test_loader, model, criterion, 1, args)

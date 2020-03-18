@@ -2,7 +2,7 @@ import os
 import torch
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
-from lib.datasets.dataset_transforms import gtsrb_transform,gtsrb_jitter_hue,gtsrb_jitter_brightness,gtsrb_jitter_saturation,gtsrb_jitter_contrast,gtsrb_rotate,gtsrb_hvflip,gtsrb_shear,gtsrb_translate,gtsrb_center,gtsrb_hflip,gtsrb_vflip
+from .dataset_transforms import gtsrb_transform,gtsrb_jitter_hue,gtsrb_jitter_brightness,gtsrb_jitter_saturation,gtsrb_jitter_contrast,gtsrb_rotate,gtsrb_hvflip,gtsrb_shear,gtsrb_translate,gtsrb_center,gtsrb_hflip,gtsrb_vflip
 
 def create_gtsrb_dataset(data_path):
     # apply resizing and normalize to mean=0, std=1 (adapted from https://github.com/poojahira/gtsrb-pytorch)

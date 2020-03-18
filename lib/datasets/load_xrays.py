@@ -1,7 +1,7 @@
 import os
 import torch
 import torchvision.datasets as dset
-from lib.datasets.dataset_transforms import xray_transform,xray_jitter_brightness,xray_jitter_saturation,xray_jitter_contrast,xray_hflip
+from .dataset_transforms import xray_transform,xray_jitter_brightness,xray_jitter_saturation,xray_jitter_contrast,xray_hflip
 
 def create_xrays_dataset(data_path):
 
