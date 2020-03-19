@@ -1,0 +1,78 @@
+{
+    "fgsm":{
+        "eps": 0.05,
+        "targeted": false,
+        "minimal": false,
+        "batch_size": 32
+    },
+    "carliniL2":{
+        "confidence": 0.0,
+        "targeted": false,
+        "learning_rate": 0.01,
+        "binary_search_steps": 10,
+        "max_iter": 10,
+        "initial_const": 0.01,
+        "max_halving": 5,
+        "max_doubling": 5,
+        "batch_size": 1
+    },
+    "pgd":{
+        "eps": 0.1,
+        "eps_step": 0.05,
+        "max_iter": 100,
+        "targeted": false,
+        "batch_size": 32
+    },
+    "hopskipjump":{
+        "max_iter": 100,
+        "max_eval": 10000,
+        "init_eval": 100,
+        "targeted": false,
+        "init_size": 150
+    },
+    "deepfool":{
+        "epsilon": 1e-06,
+        "max_iter": 100,
+        "batch_size": 128,
+        "nb_grads":10
+    },
+    "pixelattack":{
+        "th": null,
+        "es": 0,
+        "targeted" false,
+    },
+    "thermometer":{
+        "clip_min": 0.0,
+        "clip_max": 1.0,
+        "num_space": 10,
+        "channel_index": 1 
+    },
+    "pixeldefend":{
+        "clip_min": 0,
+        "clip_max": 1,
+        "eps": 16
+    },
+    "tvm":{
+        "prob": 0.3,
+        "lamb": 0.03,
+        "clip_min": 0,
+        "clip_max": 1,
+        "max_iter": 25
+    },
+    "jpeg":{
+        "clip_min": 0,
+        "clip_max": 1,
+        "channel_index": 1,
+        "quality": 80
+    },
+    "i_defender":{
+        "p_value": 2705,
+        "n_components": 30,
+        "max_iter": 100,
+        "n_init": 1
+    },
+    "distillation":{
+        "batch_size": 128,
+        "epochs": 10
+    }
+}
