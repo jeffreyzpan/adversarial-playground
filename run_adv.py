@@ -296,7 +296,7 @@ if __name__ == '__main__':
                 eps=fgsm_params['eps'], minimal=fgsm_params['minimal'], batch_size=fgsm_params['batch_size'])
     if 'carliniL2' in args.attacks:
         carlini_params = parameter_list['carliniL2']
-        attack_list['fgsm'] = evasion.CarliniL2Method(classifier, confidence=carlini_params['confidence'], targeted=carlini_params['targeted'],
+        attack_list['carliniL2'] = evasion.CarliniL2Method(classifier, confidence=carlini_params['confidence'], targeted=carlini_params['targeted'],
                 learning_rate=carlini_params['learning_rate'], binary_search_steps=carlini_params['binary_search_steps'],
                 max_iter=carlini_params['max_iter'], initial_const=carlini_params[
                     'initial_const'], max_halving=carlini_params['max_halving'],

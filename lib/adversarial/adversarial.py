@@ -16,6 +16,7 @@ def gen_attacks(test_images, test_labels, classifier, criterion, attacks):
         adv_set = torch.utils.data.TensorDataset(torch.from_numpy(adv_test), torch.from_numpy(test_labels).long())
         adv_loader = torch.utils.data.DataLoader(adv_set, batch_size=128, num_workers=16)
         adv_dict[attack_name] = adv_loader
+        print('done')
 
     return adv_dict
 
