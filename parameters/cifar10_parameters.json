@@ -1,6 +1,6 @@
 {
     "fgsm":{
-        "eps": 0.05,
+        "eps": 0.3,
         "targeted": false,
         "minimal": false,
         "batch_size": 32

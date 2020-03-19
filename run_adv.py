@@ -73,8 +73,7 @@ parser.add_argument('--start_epoch', type=int, default=0,
 # Experiments
 parser.add_argument('--attacks', type=str, nargs='+', default=[
                     'fgsm', 'carliniL2', 'pgd', 'deepfool', 'hopskipjump', 'pixelattack'], help='list of attacks to evaluate')
-parser.add_argument('--defences', type=str, nargs='+', default=[
-                    'jpeg', 'tvm', 'i_defender', 'adv_training'], help='list of defences to evaluate')
+parser.add_argument('--defences', type=str, nargs='+', default=[], help='list of defences to evaluate')
 
 global best_acc1, best_loss
 
@@ -176,11 +175,10 @@ def validate(val_loader, model, criterion, epoch, args):
     summary.add_scalar('test loss', losses.avg, epoch)
 
     # visualize a batch of testing images
-    if args.dataset == 'xrays' or args.dataset == 'gtsrb':
-        dataiter = iter(val_loader)
-        images, _ = dataiter.next()
-        img_grid = utils.make_grid(images)
-        summary.add_image("Validation Images", img_grid)
+    dataiter = iter(val_loader)
+    images, _ = dataiter.next()
+    img_grid = utils.make_grid(images)
+    summary.add_image("Validation Images", img_grid)
 
     return top1.avg, losses.avg
 
@@ -314,11 +312,11 @@ if __name__ == '__main__':
                 max_iter=fool_params['max_iter'], batch_size=fool_params['batch_size'], nb_grads=fool_params['nb_grads'])
     if 'hopskipjump' in args.attacks:
         hsj_params = parameter_list['hopskipjump']
-        attack_list['hopskipjump'] - evasion.HopSkipJump(classifier, max_iter=hsj_params['max_iter'], max_eval=hsj_params['max_eval'],
+        attack_list['hopskipjump'] = evasion.HopSkipJump(classifier, max_iter=hsj_params['max_iter'], max_eval=hsj_params['max_eval'],
                 init_eval=hsj_params['init_eval'], init_size=hsj_params['init_size'], targeted=hsj_params['targeted'])
     if 'pixelattack' in args.attacks:
         pixelattack_params = parameter_list['pixelattack']
-        attack_list['pixelattack'] = art.attacks.evasion.PixelAttack(classifier, th=pixelattack_params['th'],
+        attack_list['pixelattack'] = evasion.PixelAttack(classifier, th=pixelattack_params['th'],
                 es=pixelattack_params['es'], targeted=pixelattack_params['targeted'], verbose=False)
 
      # initialize defenses and append to dict
@@ -377,11 +375,10 @@ if __name__ == '__main__':
         adv_labels = torch.cat(adv_labels).numpy()
 
         # save adv images for visualization purposes
-        if args.dataset == 'xrays' or args.dataset == 'gtsrb':
-            dataiter = iter(adv_dict[attack_name])
-            images, _ = dataiter.next()
-            img_grid = utils.make_grid(images)
-            summary.add_image("Training Images Adversarially Attacked Using {}".format(
+        dataiter = iter(adv_dict[attack_name])
+        images, _ = dataiter.next()
+        img_grid = utils.make_grid(images)
+        summary.add_image("Training Images Adversarially Attacked Using {}".format(
                 attack_name), img_grid)
 
         print("Generating defences for attack {}: ".format(attack_name))
@@ -391,7 +388,7 @@ if __name__ == '__main__':
         accuracies = {'initial': initial_acc.item(
         ), 'attacked': attacked_acc.item()}
 
-        if 'i_defender' in defence_name_list:
+        if 'i_defender' in args.defences:
             model.module.update_defender(defense_model)
             validate(adv_dict[attack_name], model, criterion, 1, args)
             raw_attack_log = model.module.fetch_attack_log()
@@ -416,9 +413,9 @@ if __name__ == '__main__':
             accuracies['i_defender_clean'] = float(
                 1-clean_num/len(test_loader.dataset))
 
-        if 'adv_training' in defence_name_list or 'thermometer' in defence_name_list:
+        if 'adv_training' in args.defences or 'thermometer' in args.defences:
             # attack training set images with attack and save it to a dataloader
-            if 'adv_training' in defence_name_list:
+            if 'adv_training' in args.defences:
                 print('Generating adversarial examples on training data')
                 adv_loader = adversarial_retraining(
                     train_loader, attack_list[attack_name])
@@ -433,7 +430,7 @@ if __name__ == '__main__':
                     top1 = max(top1, acc1)
                 accuracies['adv_training'] = acc1.item()
 
-            if 'thermometer' in defence_name_list:
+            if 'thermometer' in args.defences:
 
                 clean_encoded_loader, adv_encoded_loader = thermometer_encoding(
                     train_loader, adv_dict[attack_name], parameter_list['thermometer'])
