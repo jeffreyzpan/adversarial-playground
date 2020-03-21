@@ -123,14 +123,12 @@ def generate_dataset(name, path, input_size, batch_size, num_workers, **kwargs):
 
     elif name == 'fmnist':
         assert os.path.exists(path), path + ' not found'
-        normalize = transforms.Normalize((0.5,), (0.5,))
         train_loader = data.DataLoader(
             datasets.FashionMNIST(
                 path, True, transforms.Compose([
                     transforms.RandomResizedCrop(input_size),
                     transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor(),
-                    normalize,
+                    transforms.ToTensor()
                 ])),
             batch_size=batch_size, shuffle=True,
             num_workers=num_workers, pin_memory=True)
@@ -139,8 +137,7 @@ def generate_dataset(name, path, input_size, batch_size, num_workers, **kwargs):
             datasets.FashionMNIST(path, False, transforms.Compose([
                 transforms.Resize(int(input_size / 0.875)),
                 transforms.CenterCrop(input_size),
-                transforms.ToTensor(),
-                normalize,
+                transforms.ToTensor()
             ])),
             batch_size=batch_size, shuffle=False,
             num_workers=num_workers, pin_memory=True)

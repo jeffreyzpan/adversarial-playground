@@ -276,6 +276,10 @@ if __name__ == '__main__':
         criterion.cuda()
 
     cudnn.benchmark = True
+    if args.dataset in ['fmnist', 'mnist']:
+        input_shape = (1, input_size, input_size)
+    else:
+        input_shape = (3, input_size, input_size)
 
     # perform attacks and defences on dataset
 
@@ -285,7 +289,7 @@ if __name__ == '__main__':
     # initialize attacks and append to dict
 
     classifier = classifier = PyTorchClassifier(model=copy.deepcopy(model), clip_values=(
-        0, 1), loss=criterion, optimizer=optimizer, input_shape=(3, input_size, input_size), nb_classes=num_classes)
+        0, 1), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes)
 
     with open('parameters/{}_parameters.json'.format(args.dataset)) as f:
         parameter_list = json.load(f)
@@ -316,9 +320,9 @@ if __name__ == '__main__':
                 init_eval=hsj_params['init_eval'], init_size=hsj_params['init_size'], targeted=hsj_params['targeted'])
     if 'pixelattack' in args.attacks:
         pixelattack_params = parameter_list['pixelattack']
-        attack_list['pixelattack'] = evasion.PixelAttack(classifier, th=pixelattack_params['th'],
-                es=pixelattack_params['es'], targeted=pixelattack_params['targeted'], verbose=False)
-
+        #attack_list['pixelattack'] = evasion.PixelAttack(classifier, th=pixelattack_params['th'],
+        #        es=pixelattack_params['es'], targeted=pixelattack_params['targeted'], verbose=False)
+        attack_list['pixelattack'] = evasion.PixelAttack(classifier)
      # initialize defenses and append to dict
 
     if 'pixeldefend' in args.defences:
@@ -339,11 +343,12 @@ if __name__ == '__main__':
         defense_model = models.__dict__['i_defender'](model, train_loader, num_classes, i_params['p_value'],
                                                       n_components=i_params['n_components'], max_iter=i_params['max_iter'], n_init=i_params['n_init'])
         model.module.remove_hooks()
+    '''
     if 'thermometer' in args.defences:
         thermometer_params = parameter_list['thermometer']
         defence_list['thermometer'] = defences.ThermometerEncoding(clip_values=(
             thermometer_params['clip_min'], thermometer_params['clip_max']), num_space=thermometer_params['num_space'], channel_index=thermometer_params['channel_index'])
-
+    '''
     if 'distillation' in args.defences:
         distillation_params = parameter_list['distillation']
         defence_list['distillation'] = defences.transformer.DefensiveDistillation(

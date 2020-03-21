@@ -1,5 +1,5 @@
 import torch
-import numpy
+import numpy as np
 import art.defences as defences
 
 def gen_attacks(test_images, test_labels, classifier, criterion, attacks): 
@@ -69,22 +69,20 @@ def thermometer_encoding(train_loader, adv_loader, thm_params):
     clean_images  = np.transpose(clean_images, (0, 2, 3, 1))
 
     thermometer_images, _  = thermometer_encoding(clean_images)
-    thermometer_images = np.transpose(thermometer_images, (0, 1, 2, 3))
+    thermometer_images = np.transpose(thermometer_images, (0, 3, 1, 2))
 
     encoded_set = torch.utils.data.TensorDataset(torch.from_numpy(thermometer_images), torch.from_numpy(clean_labels).long())
     clean_encoded_loader = torch.utils.data.DataLoader(encoded_set, batch_size=128, num_workers=16)
 
     adv_images_batches, adv_label_batches = zip(*[batch for batch in adv_loader])
-    adv_images = torch.cat(adv_image_batches).numpy()
+    adv_images = torch.cat(adv_images_batches).numpy()
     adv_labels = torch.cat(adv_label_batches).numpy() 
-    adv_images = np.transpose(clean_images, (0, 2, 3, 1))
 
     attacked_encoded, _  = thermometer_encoding(adv_images)
-    attacked_encoded = np.transpose(attacked_encoded, (0, 1, 2, 3))
+    attacked_encoded = np.transpose(attacked_encoded, (0, 3, 1, 2))
 
     adv_encoded_set = torch.utils.data.TensorDataset(torch.from_numpy(attacked_encoded), torch.from_numpy(adv_labels).long())
     adv_encoded_loader = torch.utils.data.DataLoader(adv_encoded_set, batch_size=128, num_workers=16)
-
     return clean_encoded_loader, adv_encoded_loader
 
 

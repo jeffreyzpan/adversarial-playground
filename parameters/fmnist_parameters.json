@@ -1,9 +1,9 @@
 {
     "fgsm":{
-        "eps": 0.05,
+        "eps": 0.1,
         "targeted": false,
         "minimal": false,
-        "batch_size": 32
+        "batch_size": 1
     },
     "carliniL2":{
         "confidence": 0.0,
@@ -17,23 +17,23 @@
         "batch_size": 1
     },
     "pgd":{
-        "eps": 0.1,
-        "eps_step": 0.05,
+        "eps": 0.3,
+        "eps_step": 0.1,
         "max_iter": 100,
         "targeted": false,
-        "batch_size": 32
+        "batch_size": 1
     },
     "hopskipjump":{
-        "max_iter": 100,
+        "max_iter": 50,
         "max_eval": 10000,
         "init_eval": 100,
         "targeted": false,
-        "init_size": 150
+        "init_size": 100
     },
     "deepfool":{
-        "epsilon": 1e-06,
-        "max_iter": 100,
-        "batch_size": 128,
+        "epsilon": 1e-05,
+        "max_iter": 150,
+        "batch_size": 1,
         "nb_grads":10
     },
     "pixelattack":{
