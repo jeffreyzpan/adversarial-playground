@@ -1,9 +1,10 @@
 {
     "fgsm":{
         "eps": 0.05,
+        "eps_step": 0.02,
         "targeted": false,
         "minimal": false,
-        "batch_size": 32
+        "batch_size": 1
     },
     "carliniL2":{
         "confidence": 0.0,
@@ -14,11 +15,11 @@
         "initial_const": 0.01,
         "max_halving": 5,
         "max_doubling": 5,
-        "batch_size": 1
+        "batch_size": 128
     },
     "pgd":{
-        "eps": 0.1,
-        "eps_step": 0.05,
+        "eps": 0.05,
+        "eps_step": 0.02,
         "max_iter": 100,
         "targeted": false,
         "batch_size": 32
@@ -63,7 +64,7 @@
         "clip_min": 0,
         "clip_max": 1,
         "channel_index": 1,
-        "quality": 80
+        "quality": 10
     },
     "i_defender":{
         "p_value": 2705,

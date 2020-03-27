@@ -31,6 +31,7 @@ def gen_defences(test_images, adv_images, attack_name, test_labels, classifier, 
 
         #ART defences take in w x h x c, while original input is (c, w, h)
         #adv_images = np.moveaxis(adv_images, 1, -1)
+        
         def_adv, _ = defence(adv_images)
 
         #switch channel axis for conversion back to PyTorch

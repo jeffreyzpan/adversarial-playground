@@ -2,13 +2,13 @@
 
 set -e 
 
-ARCH=$1
+ARCH=mnist_cnn
 dataset=fmnist
 train_epochs=100
 adv_epochs=20
-GPU=$2
+GPU=$1
 
-python run_adv.py --dataset ${dataset} --arch ${ARCH} --gpu_ids ${GPU} --resume ./checkpoints/${dataset}_${ARCH}_${train_epochs}/model_best.pth.tar --save_path ./attack_logs/${dataset}_${ARCH}_${train_epochs} --epochs ${adv_epochs} --attacks fgsm --defences tvm
+python run_adv.py --dataset ${dataset} --arch ${ARCH} --gpu_ids ${GPU} --resume ./checkpoints/new_${dataset}_${ARCH}_${train_epochs}/model_best.pth.tar --save_path ./attack_logs/new_${dataset}_${ARCH}_${train_epochs} --epochs ${adv_epochs} --attacks fgsm --defences jpeg 
 
 
 

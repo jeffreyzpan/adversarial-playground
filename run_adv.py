@@ -237,7 +237,6 @@ if __name__ == '__main__':
         args.dataset, args.data_path, input_size, args.batch_size, args.workers)
 
     model = models.__dict__[args.arch](num_classes=num_classes)
-
     assert os.path.isfile(
         args.resume), 'Adversarial benchmarking requires a pretrained model — use train_models.py to train a model'
     print("=> loading checkpoint '{}'".format(args.resume))
@@ -246,7 +245,7 @@ if __name__ == '__main__':
     try:
         # our checkpoints save more than just the state_dict, but other checkpoints may only save the state dict, causing a KeyError
         checkpoint['state_dict'] = {
-            n.replace('module.', ''): v for n, v in checkpoint['state_dict'].items()}
+             n.replace('module.', ''): v for n, v in checkpoint['state_dict'].items()}
         model.load_state_dict(checkpoint['state_dict'])
     except KeyError:
         model.load_state_dict(checkpoint)
@@ -297,7 +296,7 @@ if __name__ == '__main__':
     if 'fgsm' in args.attacks:
         fgsm_params = parameter_list['fgsm']
         attack_list['fgsm'] = evasion.FastGradientMethod(classifier, targeted=fgsm_params['targeted'],
-                eps=fgsm_params['eps'], minimal=fgsm_params['minimal'], batch_size=fgsm_params['batch_size'])
+                eps=fgsm_params['eps'], eps_step=fgsm_params['eps_step'], minimal=fgsm_params['minimal'], batch_size=fgsm_params['batch_size'])
     if 'carliniL2' in args.attacks:
         carlini_params = parameter_list['carliniL2']
         attack_list['carliniL2'] = evasion.CarliniL2Method(classifier, confidence=carlini_params['confidence'], targeted=carlini_params['targeted'],
@@ -461,11 +460,10 @@ if __name__ == '__main__':
             accuracies[def_name] = top1.item()
 
             # save def images for visualization purposes
-            if args.dataset == 'xrays' or args.dataset == 'gtsrb':
-                dataiter = iter(def_adv_dict[def_name])
-                images, _ = dataiter.next()
-                img_grid = utils.make_grid(images)
-                summary.add_image("Defense {} against Attack {}".format(def_name, attack_name), img_grid)
+            dataiter = iter(def_adv_dict[def_name])
+            images, _ = dataiter.next()
+            img_grid = utils.make_grid(images)
+            summary.add_image("Defense {} against Attack {}".format(def_name, attack_name), img_grid)
 
         results_dict[attack_name] = accuracies
     print(results_dict)
