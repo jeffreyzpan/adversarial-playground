@@ -22,6 +22,8 @@ from art.classifiers import PyTorchClassifier
 import art.attacks.evasion as evasion
 import art.defences as defences
 import numpy as np
+import foolbox as fb
+import eagerpy as ep
 
 # get list of valid models from custom models directory
 model_names = sorted(name for name in models.__dict__
@@ -287,16 +289,26 @@ if __name__ == '__main__':
 
     # initialize attacks and append to dict
 
-    classifier = classifier = PyTorchClassifier(model=copy.deepcopy(model), clip_values=(
-        0, 1), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes)
+    #classifier = classifier = PyTorchClassifier(model=copy.deepcopy(model), clip_values=(
+    #    0, 1), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes)
+    classifier = fb.PyTorchModel(copy.deepcopy(model).eval(), (0, 1))
+    image_batches, label_batches = zip(*[batch for batch in test_loader])
+    images = ep.astensor(torch.cat(image_batches[:10]).cuda())
+    labels = ep.astensor(torch.cat(label_batches[:10]).cuda())
 
     with open('parameters/{}_parameters.json'.format(args.dataset)) as f:
         parameter_list = json.load(f)
 
     if 'fgsm' in args.attacks:
         fgsm_params = parameter_list['fgsm']
-        attack_list['fgsm'] = evasion.FastGradientMethod(classifier, targeted=fgsm_params['targeted'],
-                eps=fgsm_params['eps'], eps_step=fgsm_params['eps_step'], minimal=fgsm_params['minimal'], batch_size=fgsm_params['batch_size'])
+        import pdb
+        #attack_list['fgsm'] = evasion.FastGradientMethod(classifier, targeted=fgsm_params['targeted'],
+        #        eps=fgsm_params['eps'], eps_step=fgsm_params['eps_step'], minimal=fgsm_params['minimal'], batch_size=fgsm_params['batch_size'])
+        attack = fb.attacks.FGSM()
+        epsilons = [2/255, 8/255, 16/255]
+        _, advs, success = attack(classifier, images, labels, epsilons=epsilons)
+        import pdb
+        pdb.set_trace()
     if 'carliniL2' in args.attacks:
         carlini_params = parameter_list['carliniL2']
         attack_list['carliniL2'] = evasion.CarliniL2Method(classifier, confidence=carlini_params['confidence'], targeted=carlini_params['targeted'],
