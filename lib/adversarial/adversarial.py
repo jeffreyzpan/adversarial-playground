@@ -32,7 +32,7 @@ def gen_attacks(test_loader, classifier, attacks, epsilons, use_gpu=True):
 
     return adv_dict
 
-def gen_defences(test_images, adv_images, attack_name, test_labels, classifier, criterion, defences):
+def gen_defences(test_images, adv_images, attack_name, test_labels, defences):
     
     def_adv_dict = {}
 

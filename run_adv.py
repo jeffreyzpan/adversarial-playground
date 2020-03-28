@@ -291,7 +291,8 @@ if __name__ == '__main__':
 
     with open('parameters/{}_parameters.json'.format(args.dataset)) as f:
         parameter_list = json.load(f)
-    epsilons = [2/255, 8/255, 16/255]
+    #epsilons = [2/255, 4/255, 8/255, 16/255]
+    epsilons = [16/255]
 
     if 'fgsm' in args.attacks:
         attack_list['fgsm'] = fb.attacks.FGSM()
@@ -316,8 +317,9 @@ if __name__ == '__main__':
             tvm_params['clip_min'], tvm_params['clip_max']), prob=tvm_params['prob'], lamb=tvm_params['lamb'], max_iter=tvm_params['max_iter'])
     if 'jpeg' in args.defences:
         jpeg_params = parameter_list['jpeg']
-        defence_list['jpeg'] = defences.JpegCompression(clip_values=(
-            jpeg_params['clip_min'], jpeg_params['clip_max']), channel_index=jpeg_params['channel_index'], quality=jpeg_params['quality'])
+        for i in range(10, 100, 10):
+            defence_list['jpeg_{}'.format(i)] = defences.JpegCompression(clip_values=(
+                 jpeg_params['clip_min'], jpeg_params['clip_max']), channel_index=jpeg_params['channel_index'], quality=i)
     if 'i_defender' in args.defences:
         model.module.insert_forward_hooks(input_shape, cuda=True)
         i_params = parameter_list['i_defender']
@@ -361,9 +363,15 @@ if __name__ == '__main__':
                     attack_name, epsilon), img_grid)
 
             print("Generating defences for attack {} with eps {}: ".format(attack_name, epsilon))
-
+            
+            clean_image_batches, clean_label_batches = zip(*[batch for batch in test_loader])
+            test_images = torch.cat(clean_image_batches).numpy()
+            test_labels = torch.cat(clean_label_batches).numpy()
+            
+            adv_image_batches, _ = zip(*[batch for batch in epsilon_attack])
+            adv_images = torch.cat(adv_image_batches).numpy()
             def_adv_dict = gen_defences(
-                test_images, adv_images, attack_name, test_labels, classifier, criterion, defence_list)
+                test_images, adv_images, attack_name, test_labels, defence_list)
             accuracies = {'initial': initial_acc.item(
             ), 'attacked': attacked_acc.item()}
 
