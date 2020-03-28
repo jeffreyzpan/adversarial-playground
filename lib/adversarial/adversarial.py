@@ -2,25 +2,37 @@ import torch
 import numpy as np
 import art.defences as defences
 
-def gen_attacks(test_images, test_labels, classifier, criterion, attacks): 
+def gen_attacks(test_loader, classifier, attacks, epsilons, use_gpu=True): 
 
     adv_dict = {}
+    test_labels = torch.tensor(test_loader.dataset.targets).long()
 
     # loop through list of attacks and generate adversarial images using the given method
     for attack_name, attack in zip(attacks.keys(), attacks.values()):
 
         print(attack_name)
-        adv_test = attack.generate(x=test_images)
+        adv_list = [[] for i in range(len(epsilons))]
+        for i, (inputs, target) in enumerate(test_loader):
+            if use_gpu:
+                inputs = inputs.cuda(non_blocking=True)
+                target = target.cuda(non_blocking=True)
+            _, adv, success = attack(classifier, inputs, target, epsilons=epsilons)
+            for i, adv_images in enumerate(adv):
+                adv_list[i].append(adv_images.cpu()) 
+            robust_accuracy = 1.0 - success.cpu().numpy().mean(axis=-1)
 
-        #convert np array of adv. images to PyTorch dataloader for CUDA validation later
-        adv_set = torch.utils.data.TensorDataset(torch.from_numpy(adv_test), torch.from_numpy(test_labels).long())
-        adv_loader = torch.utils.data.DataLoader(adv_set, batch_size=128, num_workers=16)
-        adv_dict[attack_name] = adv_loader
+        for i, adv_examples in enumerate(adv_list):
+            adv_examples = torch.cat(adv_examples, axis=0)
+             #convert list of adversarial images to PyTorch dataloader for CUDA validation later
+            adv_set = torch.utils.data.TensorDataset(adv_examples, test_labels)
+            adv_loader = torch.utils.data.DataLoader(adv_set, batch_size=128, num_workers=16)
+            adv_list[i] = adv_loader
+        adv_dict[attack_name] = adv_list
         print('done')
 
     return adv_dict
 
-def gen_defences(test_images, adv_images, attack_name, test_labels, classifier, criterion, defences):
+def gen_defences(test_images, adv_images, attack_name, test_labels, defences):
     
     def_adv_dict = {}
 

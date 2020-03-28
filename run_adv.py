@@ -18,10 +18,10 @@ from lib.utils.utils import *
 from lib.datasets.data_utils import generate_dataset
 from lib.adversarial.adversarial import *
 
-from art.classifiers import PyTorchClassifier
-import art.attacks.evasion as evasion
 import art.defences as defences
 import numpy as np
+import foolbox as fb
+import eagerpy as ep
 
 # get list of valid models from custom models directory
 model_names = sorted(name for name in models.__dict__
@@ -73,6 +73,7 @@ parser.add_argument('--start_epoch', type=int, default=0,
 # Experiments
 parser.add_argument('--attacks', type=str, nargs='+', default=[
                     'fgsm', 'carliniL2', 'pgd', 'deepfool', 'hopskipjump', 'pixelattack'], help='list of attacks to evaluate')
+parser.add_argument('--epsilons', type=float, nargs='+', default=[2/255, 4/255, 8/255, 16/255], help='epsilon values to use for attacks')
 parser.add_argument('--defences', type=str, nargs='+', default=[], help='list of defences to evaluate')
 
 global best_acc1, best_loss
@@ -287,42 +288,26 @@ if __name__ == '__main__':
 
     # initialize attacks and append to dict
 
-    classifier = classifier = PyTorchClassifier(model=copy.deepcopy(model), clip_values=(
-        0, 1), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes)
+    classifier = fb.PyTorchModel(copy.deepcopy(model).eval(), (0, 1))
 
     with open('parameters/{}_parameters.json'.format(args.dataset)) as f:
         parameter_list = json.load(f)
+    epsilons = args.epsilons
 
     if 'fgsm' in args.attacks:
-        fgsm_params = parameter_list['fgsm']
-        attack_list['fgsm'] = evasion.FastGradientMethod(classifier, targeted=fgsm_params['targeted'],
-                eps=fgsm_params['eps'], eps_step=fgsm_params['eps_step'], minimal=fgsm_params['minimal'], batch_size=fgsm_params['batch_size'])
+        attack_list['fgsm'] = fb.attacks.FGSM()
     if 'carliniL2' in args.attacks:
-        carlini_params = parameter_list['carliniL2']
-        attack_list['carliniL2'] = evasion.CarliniL2Method(classifier, confidence=carlini_params['confidence'], targeted=carlini_params['targeted'],
-                learning_rate=carlini_params['learning_rate'], binary_search_steps=carlini_params['binary_search_steps'],
-                max_iter=carlini_params['max_iter'], initial_const=carlini_params[
-                    'initial_const'], max_halving=carlini_params['max_halving'],
-                max_doubling=carlini_params['max_doubling'], batch_size=carlini_params['batch_size'])
+        attack_list['carliniL2'] = fb.attacks.L2CarliniWagnerAttack()
     if 'pgd' in args.attacks:
-        pgd_params = parameter_list['pgd']
-        attack_list['pgd'] = evasion.ProjectedGradientDescent(classifier, targeted=pgd_params['targeted'],
-                max_iter=pgd_params['max_iter'], eps_step=pgd_params['eps_step'], eps=pgd_params['eps'], batch_size=pgd_params['batch_size'])
-
+        attack_list['pgd'] = fb.attacks.PGD()
     if 'deepfool' in args.attacks:
-        fool_params = parameter_list['deepfool']
-        attack_list['deepfool'] = evasion.DeepFool(classifier, epsilon=fool_params['epsilon'],
-                max_iter=fool_params['max_iter'], batch_size=fool_params['batch_size'], nb_grads=fool_params['nb_grads'])
-    if 'hopskipjump' in args.attacks:
-        hsj_params = parameter_list['hopskipjump']
-        attack_list['hopskipjump'] = evasion.HopSkipJump(classifier, max_iter=hsj_params['max_iter'], max_eval=hsj_params['max_eval'],
-                init_eval=hsj_params['init_eval'], init_size=hsj_params['init_size'], targeted=hsj_params['targeted'])
-    if 'pixelattack' in args.attacks:
-        pixelattack_params = parameter_list['pixelattack']
-        #attack_list['pixelattack'] = evasion.PixelAttack(classifier, th=pixelattack_params['th'],
-        #        es=pixelattack_params['es'], targeted=pixelattack_params['targeted'], verbose=False)
-        attack_list['pixelattack'] = evasion.PixelAttack(classifier)
-     # initialize defenses and append to dict
+        attack_list['deepfool'] = fb.attacks.LinfDeepFoolAttack()
+    if 'bim' in args.attacks:
+        attack_list['bim'] = fb.attacks.LinfBasicIterativeAttack()
+    if 'boundary' in args.attacks:
+        attack_list['boundary'] = fb.attacks.BoundaryAttack()
+
+    # initialize defences and append to dict
 
     if 'pixeldefend' in args.defences:
         pixel_params = parameter_list['pixeldefend']
@@ -330,24 +315,25 @@ if __name__ == '__main__':
             pixel_params['clip_min'], pixel_params['clip_min']), eps=pixel_params['eps'])
     if 'tvm' in args.defences:
         tvm_params = parameter_list['tvm']
-        defence_list['tvm'] = defences.TotalVarMin(clip_values=(
-            tvm_params['clip_min'], tvm_params['clip_max']), prob=tvm_params['prob'], lamb=tvm_params['lamb'], max_iter=tvm_params['max_iter'])
+        for lamb in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+            defence_list['tvm_{}'.format(lamb)] = defences.TotalVarMin(clip_values=(
+                tvm_params['clip_min'], tvm_params['clip_max']), prob=tvm_params['prob'], lamb=lamb, max_iter=tvm_params['max_iter'])
     if 'jpeg' in args.defences:
         jpeg_params = parameter_list['jpeg']
-        defence_list['jpeg'] = defences.JpegCompression(clip_values=(
-            jpeg_params['clip_min'], jpeg_params['clip_max']), channel_index=jpeg_params['channel_index'], quality=jpeg_params['quality'])
+        for i in range(10, 100, 10):
+            defence_list['jpeg_{}'.format(i)] = defences.JpegCompression(clip_values=(
+                 jpeg_params['clip_min'], jpeg_params['clip_max']), channel_index=jpeg_params['channel_index'], quality=i)
     if 'i_defender' in args.defences:
         model.module.insert_forward_hooks(input_shape, cuda=True)
         i_params = parameter_list['i_defender']
         defense_model = models.__dict__['i_defender'](model, train_loader, num_classes, i_params['p_value'],
                                                       n_components=i_params['n_components'], max_iter=i_params['max_iter'], n_init=i_params['n_init'])
         model.module.remove_hooks()
-    '''
     if 'thermometer' in args.defences:
         thermometer_params = parameter_list['thermometer']
         defence_list['thermometer'] = defences.ThermometerEncoding(clip_values=(
             thermometer_params['clip_min'], thermometer_params['clip_max']), num_space=thermometer_params['num_space'], channel_index=thermometer_params['channel_index'])
-    '''
+
     if 'distillation' in args.defences:
         distillation_params = parameter_list['distillation']
         defence_list['distillation'] = defences.transformer.DefensiveDistillation(
@@ -357,12 +343,9 @@ if __name__ == '__main__':
 
     initial_acc, _ = validate(test_loader, model, criterion, 1, args)
 
-    # ART appears to only support numpy arrays, so convert dataloader into a numpy array of images
-    image_batches, label_batches = zip(*[batch for batch in test_loader])
-    test_images = torch.cat(image_batches).numpy()
-    test_labels = torch.cat(label_batches).numpy()
-    adv_dict = gen_attacks(test_images, test_labels,
-                           classifier, criterion, attack_list)
+    #convert dataloader into an eagerPy tensor for FoolBox attack generation 
+    adv_dict = gen_attacks(test_loader,
+                           classifier, attack_list, epsilons)
 
     # loop through all generated dataloaders with adversarial images
     results_dict = {}
@@ -370,103 +353,108 @@ if __name__ == '__main__':
 
         # measure attack success
         print("Testing performance of attack {}: ".format(attack_name))
-        attacked_acc, _ = validate(
-            adv_dict[attack_name], model, criterion, 1, args)
+        for epsilon_attack, epsilon in zip(adv_dict[attack_name], epsilons):
+            attacked_acc, _ = validate(
+                epsilon_attack, model, criterion, 1, args)
 
-        adv_images, adv_labels = zip(
-            *[batch for batch in adv_dict[attack_name]])
-        adv_images = torch.cat(adv_images).numpy()
-        adv_labels = torch.cat(adv_labels).numpy()
-
-        # save adv images for visualization purposes
-        dataiter = iter(adv_dict[attack_name])
-        images, _ = dataiter.next()
-        img_grid = utils.make_grid(images)
-        summary.add_image("Training Images Adversarially Attacked Using {}".format(
-                attack_name), img_grid)
-
-        print("Generating defences for attack {}: ".format(attack_name))
-
-        def_adv_dict = gen_defences(
-            test_images, adv_images, attack_name, test_labels, classifier, criterion, defence_list)
-        accuracies = {'initial': initial_acc.item(
-        ), 'attacked': attacked_acc.item()}
-
-        if 'i_defender' in args.defences:
-            model.module.update_defender(defense_model)
-            validate(adv_dict[attack_name], model, criterion, 1, args)
-            raw_attack_log = model.module.fetch_attack_log()
-            attack_log_probs = model.module.fetch_raw_probs()
-            # flatten attack log into 1D list
-            attack_log = np.array(
-                [j for sub_list in raw_attack_log for j in sub_list])
-            attack_log_probs = np.array(
-                [j for sub_list in attack_log_probs for j in sub_list])
-            validate(test_loader, model, criterion, 1, args)
-            raw_clean_log = model.module.fetch_attack_log()
-            clean_log_probs = model.module.fetch_raw_probs()
-            # flatten attack log into 1D list
-            clean_log = np.array(
-                [j for sub_list in raw_clean_log for j in sub_list])
-            clean_log_probs = np.array(
-                [j for sub_list in clean_log_probs for j in sub_list])
-            attack_num = sum(attack_log)
-            clean_num = sum(clean_log)
-            accuracies['i_defender_attacked'] = float(
-                attack_num/len(adv_dict[attack_name].dataset))
-            accuracies['i_defender_clean'] = float(
-                1-clean_num/len(test_loader.dataset))
-
-        if 'adv_training' in args.defences or 'thermometer' in args.defences:
-            # attack training set images with attack and save it to a dataloader
-            if 'adv_training' in args.defences:
-                print('Generating adversarial examples on training data')
-                adv_loader = adversarial_retraining(
-                    train_loader, attack_list[attack_name])
-                robust_model = copy.deepcopy(model)
-                epochs = 20
-                top1 = 0
-                for epoch in range(epochs):
-                    train(adv_loader, robust_model,
-                          criterion, optimizer, epoch, args)
-                    acc1, val_loss = validate(
-                        adv_dict[attack_name], robust_model, criterion, epoch, args)
-                    top1 = max(top1, acc1)
-                accuracies['adv_training'] = acc1.item()
-
-            if 'thermometer' in args.defences:
-
-                clean_encoded_loader, adv_encoded_loader = thermometer_encoding(
-                    train_loader, adv_dict[attack_name], parameter_list['thermometer'])
-
-                enc_model = copy.deepcopy(model)
-                epochs = 20
-                top1 = 0
-
-                for epoch in range(epochs):
-                    train(clean_encoded_loader, enc_model,
-                          criterion, optimizer, epoch, args)
-                    acc1, val_loss = validate(
-                        adv_encoded_loader, enc_model, criterion, epoch, args)
-                    top1 = max(top1, acc1)
-                accuracies['thermometer'] = acc1.item()
-
-        for def_name in def_adv_dict:
-            print("Testing performance of defence {}: ".format(def_name))
-            top1, _ = validate(def_adv_dict[def_name], model, criterion, 1, args)
-            def_images , _ = zip(*[batch for batch in def_adv_dict[def_name]])
-            def_images = torch.cat(def_images).numpy()
-
-            accuracies[def_name] = top1.item()
-
-            # save def images for visualization purposes
-            dataiter = iter(def_adv_dict[def_name])
+            # save adv images for visualization purposes
+            dataiter = iter(epsilon_attack)
             images, _ = dataiter.next()
             img_grid = utils.make_grid(images)
-            summary.add_image("Defense {} against Attack {}".format(def_name, attack_name), img_grid)
+            summary.add_image("Training Images Adversarially Attacked Using {} with eps {}".format(
+                    attack_name, epsilon), img_grid)
 
-        results_dict[attack_name] = accuracies
-    print(results_dict)
+            print("Generating defences for attack {} with eps {}: ".format(attack_name, epsilon))
+            
+            clean_image_batches, clean_label_batches = zip(*[batch for batch in test_loader])
+            test_images = torch.cat(clean_image_batches).numpy()
+            test_labels = torch.cat(clean_label_batches).numpy()
+            
+            adv_image_batches, _ = zip(*[batch for batch in epsilon_attack])
+            adv_images = torch.cat(adv_image_batches).numpy()
+            def_adv_dict = gen_defences(
+                test_images, adv_images, attack_name, test_labels, defence_list)
+            accuracies = {'initial': initial_acc.item(
+            ), 'attacked': attacked_acc.item()}
+
+            if 'i_defender' in args.defences:
+                model.module.update_defender(defense_model)
+                validate(epsilon_attack, model, criterion, 1, args)
+                raw_attack_log = model.module.fetch_attack_log()
+                attack_log_probs = model.module.fetch_raw_probs()
+                # flatten attack log into 1D list
+                attack_log = np.array(
+                    [j for sub_list in raw_attack_log for j in sub_list])
+                attack_log_probs = np.array(
+                    [j for sub_list in attack_log_probs for j in sub_list])
+                validate(test_loader, model, criterion, 1, args)
+                raw_clean_log = model.module.fetch_attack_log()
+                clean_log_probs = model.module.fetch_raw_probs()
+                # flatten attack log into 1D list
+                clean_log = np.array(
+                    [j for sub_list in raw_clean_log for j in sub_list])
+                clean_log_probs = np.array(
+                    [j for sub_list in clean_log_probs for j in sub_list])
+                attack_num = sum(attack_log)
+                clean_num = sum(clean_log)
+                accuracies['i_defender_attacked'] = float(
+                    attack_num/len(epsilon_attack.dataset))
+                accuracies['i_defender_clean'] = float(
+                    1-clean_num/len(test_loader.dataset))
+
+            if 'adv_training' in args.defences or 'thermometer' in args.defences:
+                # attack training set images with attack and save it to a dataloader
+                if 'adv_training' in args.defences:
+                    print('Generating adversarial examples on training data')
+                    adv_loader = adversarial_retraining(
+                    train_loader, epsilon_attack)
+                    robust_model = copy.deepcopy(model)
+                    epochs = 20
+                    top1 = 0
+                    for epoch in range(epochs):
+                        train(adv_loader, robust_model,
+                              criterion, optimizer, epoch, args)
+                        acc1, val_loss = validate(
+                            epsilon_attack, robust_model, criterion, epoch, args)
+                        top1 = max(top1, acc1)
+                    accuracies['adv_training'] = acc1.item()
+
+                if 'thermometer' in args.defences:
+
+                    clean_encoded_loader, adv_encoded_loader = thermometer_encoding(
+                        train_loader, epsilon_attack, parameter_list['thermometer'])
+
+                    import pdb
+                    pdb.set_trace()
+
+                    enc_model = copy.deepcopy(model)
+                    epochs = 20
+                    top1 = 0
+
+                    for epoch in range(epochs):
+                        train(clean_encoded_loader, enc_model,
+                              criterion, optimizer, epoch, args)
+                        acc1, val_loss = validate(
+                            adv_encoded_loader, enc_model, criterion, epoch, args)
+                        top1 = max(top1, acc1)
+                    accuracies['thermometer'] = acc1.item()
+
+            for def_name in def_adv_dict:
+                print("Testing performance of defence {}: ".format(def_name))
+                top1, _ = validate(def_adv_dict[def_name], model, criterion, 1, args)
+                def_images , _ = zip(*[batch for batch in def_adv_dict[def_name]])
+                def_images = torch.cat(def_images).numpy()
+
+                accuracies[def_name] = top1.item()
+
+                # save def images for visualization purposes
+                dataiter = iter(def_adv_dict[def_name])
+                images, _ = dataiter.next()
+                img_grid = utils.make_grid(images)
+                summary.add_image("Defense {} against Attack {} with eps {}".format(def_name, attack_name, epsilon), img_grid)
+
+            results_dict[attack_name + ' eps {}'.format(epsilon)] = accuracies
+        print(results_dict)
     
     with open(os.path.join(args.save_path, 'results.json'), 'w') as save_file:
         json.dump(results_dict, save_file)
