@@ -120,7 +120,7 @@ class ResNet(nn.Module):
 
     def __init__(self, block, layers, num_classes=1000, zero_init_residual=False,
                  groups=1, width_per_group=64, replace_stride_with_dilation=None,
-                 norm_layer=None):
+                 norm_layer=None, themometer_encode=False, level=-1):
         super(ResNet, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -128,6 +128,7 @@ class ResNet(nn.Module):
 
         self.inplanes = 64
         self.dilation = 1
+        self.thermometer_encode = thermometer_encode
         if replace_stride_with_dilation is None:
             # each element in the tuple indicates if we should replace
             # the 2x2 stride with a dilated convolution instead
@@ -137,8 +138,12 @@ class ResNet(nn.Module):
                              "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
         self.groups = groups
         self.base_width = width_per_group
-        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
-                               bias=False)
+        if thermometer_encode:
+            self.conv1 = nn.Conv2d(3*level, self.inplanes, kernel_size=7, stride=2, padding=3,
+                                   bias=False)
+        else:
+            self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
+                                   bias=False)
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -241,6 +246,8 @@ class ResNet(nn.Module):
         return return_val
 
     def _forward_impl(self, x):
+        if self.thermometer_encode:
+            x = torch.cat((x[0], x[1], x[2]), dim=1)
         # See note [TorchScript super()]
         x = self.conv1(x)
         x = self.bn1(x)
@@ -274,16 +281,17 @@ class ResNet(nn.Module):
         return self._forward_impl(x)
 
 
-def _resnet(num_classes, arch, block, layers, pretrained, progress, **kwargs):
-    model = ResNet(block, layers, num_classes=num_classes, **kwargs)
-    if pretrained:
+
+def _resnet(num_classes, arch, block, layers, pretrained, progress, thermometer_encode, level, **kwargs):
+    model = ResNet(block, layers, num_classes=num_classes, thermometer_encode=thermometer_encode, level=level, **kwargs)
+    if pretrained and not thermometer_encode:
         state_dict = load_state_dict_from_url(model_urls[arch],
-                                              progress=progress)
+                                          progress=progress)
         model.load_state_dict(state_dict)
     return model
 
 
-def resnet18(num_classes=2, pretrained=False, progress=True, **kwargs):
+def resnet18(num_classes=1000, pretrained=False, progress=True, thermometer_encode=False, level=-1, **kwargs):
     r"""ResNet-18 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
 
@@ -291,11 +299,10 @@ def resnet18(num_classes=2, pretrained=False, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet(num_classes, 'resnet18', BasicBlock, [2, 2, 2, 2], pretrained, progress,
+    return _resnet(num_classes, 'resnet18', BasicBlock, [2, 2, 2, 2], pretrained, progress, thermometer_encode, level,
                    **kwargs)
 
-
-def resnet34(num_classes=2, pretrained=False, progress=True, **kwargs):
+def resnet34(num_classes=1000, pretrained=False, progress=True, thermometer_encode=False, level=-1, **kwargs):
     r"""ResNet-34 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
 
@@ -303,11 +310,11 @@ def resnet34(num_classes=2, pretrained=False, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet(num_classes, 'resnet34', BasicBlock, [3, 4, 6, 3], pretrained, progress,
+    return _resnet(num_classes, 'resnet34', BasicBlock, [3, 4, 6, 3], pretrained, progress, thermometer_encode, level,
                    **kwargs)
 
 
-def resnet50(num_classes=2, pretrained=False, progress=True, **kwargs):
+def resnet50(num_classes=1000, pretrained=False, progress=True, thermometer_encode=False, level=-1, **kwargs):
     r"""ResNet-50 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
 
@@ -315,5 +322,5 @@ def resnet50(num_classes=2, pretrained=False, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet(num_classes, 'resnet50', Bottleneck, [3, 4, 6, 3], pretrained, progress,
+    return _resnet(num_classes, 'resnet50', Bottleneck, [3, 4, 6, 3], pretrained, progress, thermometer_encode, level,
                    **kwargs)

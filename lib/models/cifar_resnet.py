@@ -1,6 +1,5 @@
-'''ResNet in PyTorch.
-
-For Pre-activation ResNet, see 'preact_resnet.py'.
+'''
+Cifar ResNet implementation modified from https://github.com/kuangliu/pytorch-cifar/blob/master/models/resnet.py
 
 Reference:
 [1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
@@ -65,11 +64,15 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10):
+    def __init__(self, block, num_blocks, num_classes=10, thermometer_encode=False, level=-1):
         super(ResNet, self).__init__()
         self.in_planes = 64
+        self.thermometer_encode = thermometer_encode
 
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        if thermometer_encode:
+            self.conv1 = nn.Conv2d(3*level, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        else:
+            self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
@@ -86,6 +89,8 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        if self.thermometer_encode:
+            x = torch.cat((x[0], x[1], x[2]), dim=1)
         out = F.relu(self.bn1(self.conv1(x)))
         out = self.layer1(out)
         out = self.layer2(out)
@@ -97,25 +102,18 @@ class ResNet(nn.Module):
         return out
 
 
-def cifar_resnet18(num_classes=10):
-    return ResNet(BasicBlock, [2,2,2,2], num_classes)
+def cifar_resnet18(num_classes=10, thermometer_encode=False, level=-1):
+    return ResNet(BasicBlock, [2,2,2,2], num_classes, thermometer_encode, level)
 
-def cifar_resnet34(num_classes=10):
-    return ResNet(BasicBlock, [3,4,6,3], num_classes)
+def cifar_resnet34(num_classes=10, thermometer_encode=False, level=-1):
+    return ResNet(BasicBlock, [3,4,6,3], num_classes, thermometer_encode, level)
 
-def cifar_resnet50(num_classes=10):
-    return ResNet(Bottleneck, [3,4,6,3], num_classes)
+def cifar_resnet50(num_classes=10, thermometer_encode=False, level=-1):
+    return ResNet(Bottleneck, [3,4,6,3], num_classes, thermometer_encode, level)
 
-def cifar_resnet101(num_classes=10):
-    return ResNet(Bottleneck, [3,4,23,3], num_classes)
+def cifar_resnet101(num_classes=10, thermometer_encode=False. level=-1):
+    return ResNet(Bottleneck, [3,4,23,3], num_classes, thermometer_encode, level)
 
-def cifar_resnet152(num_classes=10):
-    return ResNet(Bottleneck, [3,8,36,3], num_classes)
+def cifar_resnet152(num_classes=10, thermometer_encode=False, level=-1):
+    return ResNet(Bottleneck, [3,8,36,3], num_classes, thermometer_encode, level)
 
-
-def test():
-    net = ResNet18()
-    y = net(torch.randn(1,3,32,32))
-    print(y.size())
-
-# test()
