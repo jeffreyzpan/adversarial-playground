@@ -9,7 +9,10 @@ import torchvision.utils as utils
 from torch.utils.tensorboard import SummaryWriter
 import lib.models as models
 from lib.utils.utils import *
+
 from lib.datasets.data_utils import generate_dataset
+from lib.adversarial.adversarial import thermometer_encoding
+import  art.defences as defences
 
 import numpy as np
 
@@ -23,6 +26,8 @@ parser.add_argument('--data_path', type=str, default='/nobackup/users/jzpan/data
 parser.add_argument('--dataset', type=str, help='choose dataset to benchmark adversarial training techniques on.')
 parser.add_argument('--fold', type=int, help='if evaluating urbansound dataset, fold number to use for validation')
 parser.add_argument('--arch', metavar='ARCH', default='resnet18', help='model architecture: to evaluate robustness on (default: resnet50)')
+parser.add_argument('--thermometer', action='store_true', help='train model with thermometer encoding')
+parser.add_argument('--level', type=int, default=10, help='level of thermometer encoding space to use')
 parser.add_argument('--workers', type=int, default=16, help='number of data loading workers to use')
 parser.add_argument('--pretrained', type=str, default='', help='path to pretrained model')
 parser.add_argument('--gpu_ids', type=str, default='0,1,2,3', help='comma-seperated string of gpu ids to use for acceleration (-1 for cpu only)')
@@ -195,7 +200,14 @@ if __name__ == '__main__':
     criterion = torch.nn.CrossEntropyLoss()
     train_loader, test_loader, num_classes = generate_dataset(args.dataset, args.data_path, input_size, args.batch_size, args.workers)
 
-    model = models.__dict__[args.arch](num_classes=num_classes)
+    if args.thermometer:
+        with open('parameters/{}_parameters.json'.format(args.dataset)) as f:
+            parameter_list = json.load(f)
+        train_loader, test_loader = thermometer_encoding(train_loader, test_loader, parameter_list['thermometer'], save=True) 
+
+    model = models.__dict__[args.arch](num_classes=num_classes, thermometer_encode=args.thermometer, level=args.level)
+    import pdb
+    pdb.set_trace()
 
     if args.resume:
         if os.path.isfile(args.resume):

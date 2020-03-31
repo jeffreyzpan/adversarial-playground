@@ -72,7 +72,7 @@ parser.add_argument('--start_epoch', type=int, default=0,
 
 # Experiments
 parser.add_argument('--attacks', type=str, nargs='+', default=[
-                    'fgsm', 'carliniL2', 'pgd', 'deepfool', 'hopskipjump', 'pixelattack'], help='list of attacks to evaluate')
+                    'fgsm', 'pgd', 'deepfool', 'bim'], help='list of attacks to evaluate')
 parser.add_argument('--epsilons', type=float, nargs='+', default=[2/255, 4/255, 8/255, 16/255], help='epsilon values to use for attacks')
 parser.add_argument('--defences', type=str, nargs='+', default=[], help='list of defences to evaluate')
 
@@ -294,6 +294,7 @@ if __name__ == '__main__':
         parameter_list = json.load(f)
     epsilons = args.epsilons
 
+    #white box attacks
     if 'fgsm' in args.attacks:
         attack_list['fgsm'] = fb.attacks.FGSM()
     if 'carliniL2' in args.attacks:
@@ -304,8 +305,17 @@ if __name__ == '__main__':
         attack_list['deepfool'] = fb.attacks.LinfDeepFoolAttack()
     if 'bim' in args.attacks:
         attack_list['bim'] = fb.attacks.LinfBasicIterativeAttack()
+
+    #black box attacks
+
     if 'boundary' in args.attacks:
         attack_list['boundary'] = fb.attacks.BoundaryAttack()
+    if 'saltandpepper' in args.attacks:
+        attack_list['saltandpepper'] = fb.attacks.SaltAndPepperNoiseAttack()
+    if 'gaussian' in args.attacks:
+        attack_list['gaussian'] = foolbox.attacks.L2RepeatedAdditiveGaussianNoiseAttack()
+    if 'uniform' in args.attacks:
+        attack_list['uniform'] = foolbox.attacks.L2RepeatedAdditiveUniformNoiseAttack()
 
     # initialize defences and append to dict
 
@@ -315,9 +325,11 @@ if __name__ == '__main__':
             pixel_params['clip_min'], pixel_params['clip_min']), eps=pixel_params['eps'])
     if 'tvm' in args.defences:
         tvm_params = parameter_list['tvm']
-        for lamb in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
-            defence_list['tvm_{}'.format(lamb)] = defences.TotalVarMin(clip_values=(
-                tvm_params['clip_min'], tvm_params['clip_max']), prob=tvm_params['prob'], lamb=lamb, max_iter=tvm_params['max_iter'])
+        try_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        for lamb in try_list:
+            for prob in try_list:
+                defence_list['tvm_{}_{}'.format(lamb, prob)] = defences.TotalVarMin(clip_values=(
+                    tvm_params['clip_min'], tvm_params['clip_max']), prob=prob, lamb=lamb, max_iter=tvm_params['max_iter'])
     if 'jpeg' in args.defences:
         jpeg_params = parameter_list['jpeg']
         for i in range(10, 100, 10):
@@ -329,11 +341,12 @@ if __name__ == '__main__':
         defense_model = models.__dict__['i_defender'](model, train_loader, num_classes, i_params['p_value'],
                                                       n_components=i_params['n_components'], max_iter=i_params['max_iter'], n_init=i_params['n_init'])
         model.module.remove_hooks()
+    '''
     if 'thermometer' in args.defences:
         thermometer_params = parameter_list['thermometer']
         defence_list['thermometer'] = defences.ThermometerEncoding(clip_values=(
             thermometer_params['clip_min'], thermometer_params['clip_max']), num_space=thermometer_params['num_space'], channel_index=thermometer_params['channel_index'])
-
+    '''
     if 'distillation' in args.defences:
         distillation_params = parameter_list['distillation']
         defence_list['distillation'] = defences.transformer.DefensiveDistillation(

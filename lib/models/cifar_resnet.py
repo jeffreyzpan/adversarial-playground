@@ -111,7 +111,7 @@ def cifar_resnet34(num_classes=10, thermometer_encode=False, level=-1):
 def cifar_resnet50(num_classes=10, thermometer_encode=False, level=-1):
     return ResNet(Bottleneck, [3,4,6,3], num_classes, thermometer_encode, level)
 
-def cifar_resnet101(num_classes=10, thermometer_encode=False. level=-1):
+def cifar_resnet101(num_classes=10, thermometer_encode=False, level=-1):
     return ResNet(Bottleneck, [3,4,23,3], num_classes, thermometer_encode, level)
 
 def cifar_resnet152(num_classes=10, thermometer_encode=False, level=-1):
