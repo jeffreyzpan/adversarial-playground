@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from art.attacks.evasion import CarliniLInfMethod
 import art.defences as defences
 
 def gen_attacks(test_loader, classifier, attacks, epsilons, use_gpu=True): 
@@ -31,6 +32,26 @@ def gen_attacks(test_loader, classifier, attacks, epsilons, use_gpu=True):
         adv_dict[attack_name] = adv_list
         print('done')
 
+    return adv_dict
+
+def cw_linf(classifier, test_loader, epsilons):
+
+    adv_dict = {}
+
+    test_image_batches, test_label_batches = zip(*[batch for batch in test_loader])
+    test_images = torch.cat(test_image_batches).numpy()
+    test_labels = torch.cat(test_label_batches).numpy()
+
+    for epsilon in epsilons:
+        print('running cw_linf with eps {}'.format(epsilon))
+        attack = CarliniLInfMethod(classifier, eps=epsilon)
+        adv_examples = attack.generate(test_images)
+       
+        adv_set = torch.utils.data.TensorDataset(adv_examples, test_labels)
+        adv_loader = torch.utils.data.DataLoader(adv_set, batch_size=128, num_workers=16)
+        adv_dict['cw_linf_eps_{}'.format(epsilon)] = adv_loader
+        print('done')
+    
     return adv_dict
 
 def gen_defences(test_images, adv_images, attack_name, test_labels, defences):

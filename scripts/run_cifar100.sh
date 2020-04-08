@@ -8,5 +8,5 @@ train_epochs=200
 adv_epochs=20
 GPU=$1
 
-python run_adv.py --dataset ${dataset} --arch ${ARCH} --gpu_ids ${GPU} --resume ./checkpoints/new_${dataset}_${ARCH}_${train_epochs}/model_best.pth.tar --save_path ./attack_logs/attacked_${dataset}_${ARCH}_${train_epochs} --epochs ${adv_epochs} --attacks fgsm pgd deepfool bim 
+python run_adv.py --dataset ${dataset} --arch ${ARCH} --gpu_ids ${GPU} --resume ./checkpoints/new_${dataset}_${ARCH}_${train_epochs}/model_best.pth.tar --save_path ./attack_logs/cw_comp_defences_${dataset}_${ARCH}_${train_epochs} --epochs ${adv_epochs} --attacks carliniLinf --defences jpeg tvm
 
