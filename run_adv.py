@@ -35,8 +35,8 @@ parser.add_argument('--data_path', type=str,
                     default='/nobackup/users/jzpan/datasets', help='path to dataset')
 parser.add_argument('--dataset', type=str,
                     help='choose dataset to benchmark adversarial training techniques on.')
-parser.add_argument('--fold', type=int,
-                    help='if evaluating urbansound dataset, fold number to use for validation')
+parser.add_argument('--input_size', type=int, default=-1,
+                    help='input size for adv training; use -1 to use default input size')
 parser.add_argument('--arch', metavar='ARCH', default='resnet50',
                     help='model architecture: to evaluate robustness on (default: resnet50)')
 parser.add_argument('--workers', type=int, default=16,
@@ -228,11 +228,11 @@ if __name__ == '__main__':
 
     # set variables based on dataset to evaluate on
     if args.dataset == 'imagenet':
-        input_size = 224
+        input_size = 224 if args.input_size == -1 else args.input_size
     elif args.dataset == 'cifar10' or args.dataset == 'cifar100':
-        input_size = 32
+        input_size = 32 if args.input_size == -1 else args.input_size
     elif args.dataset == 'mnist' or args.dataset == 'fmnist':
-        input_size = 28
+        input_size = 28 if args.input_size == -1 else args.input_size
 
     criterion = torch.nn.CrossEntropyLoss()
     train_loader, test_loader, num_classes = generate_dataset(

@@ -13,7 +13,7 @@ class mnistCNN(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.pool1 = nn.MaxPool2d(2)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=5, stride=1, padding=1)
-        self.pool2 = nn.MaxPool2d(2)
+        self.pool2 = nn.AdaptiveMaxPool2d((5,5))
         self.fc1 = nn.Linear(5* 5 * 64, 1024, bias=True)
         self.fc2 = nn.Linear(1024, 10, bias=True)
     

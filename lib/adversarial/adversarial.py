@@ -37,6 +37,7 @@ def gen_attacks(test_loader, classifier, attacks, epsilons, use_gpu=True):
 def cw_linf(classifier, test_loader, epsilons):
 
     adv_dict = {}
+    adv_list = []
 
     test_image_batches, test_label_batches = zip(*[batch for batch in test_loader])
     test_images = torch.cat(test_image_batches).numpy()
@@ -47,10 +48,12 @@ def cw_linf(classifier, test_loader, epsilons):
         attack = CarliniLInfMethod(classifier, eps=epsilon)
         adv_examples = attack.generate(test_images)
        
-        adv_set = torch.utils.data.TensorDataset(adv_examples, test_labels)
+        adv_set = torch.utils.data.TensorDataset(torch.from_numpy(adv_examples), torch.from_numpy(test_labels))
         adv_loader = torch.utils.data.DataLoader(adv_set, batch_size=128, num_workers=16)
-        adv_dict['cw_linf_eps_{}'.format(epsilon)] = adv_loader
+        adv_list.append(adv_loader)
         print('done')
+
+    adv_dict['cw_Linf'] = adv_list
     
     return adv_dict
 
