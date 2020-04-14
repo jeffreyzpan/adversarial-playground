@@ -2,7 +2,7 @@
 
 set -e 
 
-ARCH=cifar_resnet18
+ARCH=resnet18
 dataset=cifar10
 epochs=200
 GPU=$1

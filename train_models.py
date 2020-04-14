@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 import lib.models as models
 from lib.utils.utils import *
 
-from lib.datasets.data_utils import generate_dataset
+from lib.datasets.data_utils import get_data_statistics, generate_dataset
 from lib.adversarial.adversarial import thermometer_encoding
 import  art.defences as defences
 
@@ -32,6 +32,7 @@ parser.add_argument('--workers', type=int, default=16, help='number of data load
 parser.add_argument('--pretrained', type=str, default='', help='path to pretrained model')
 parser.add_argument('--gpu_ids', type=str, default='0,1,2,3', help='comma-seperated string of gpu ids to use for acceleration (-1 for cpu only)')
 parser.add_argument('--input_size', type=int, default=-1, help='input size of network; use -1 to use default input size')
+parser.add_argument('--inc_contrast', type=int, default=1, help='factor to increase contrast for images')
 # Hyperparameters
 parser.add_argument('--epochs', type=int, default=100, help='number of epochs to train for')
 parser.add_argument('--optimizer', type=str, default='sgd', help='optimizer to use')
@@ -199,8 +200,8 @@ if __name__ == '__main__':
         raise NotImplementedError
 
     criterion = torch.nn.CrossEntropyLoss()
-    train_loader, test_loader, num_classes = generate_dataset(args.dataset, args.data_path, input_size, args.batch_size, args.workers)
-
+    train_loader, test_loader, num_classes = generate_dataset(args.dataset, args.data_path, input_size, args.batch_size, args.workers, args.inc_contrast)
+    
     if args.thermometer:
         with open('parameters/{}_parameters.json'.format(args.dataset)) as f:
             parameter_list = json.load(f)

@@ -15,7 +15,7 @@ import torchvision.utils as utils
 from torch.utils.tensorboard import SummaryWriter
 import lib.models as models
 from lib.utils.utils import *
-from lib.datasets.data_utils import generate_dataset
+from lib.datasets.data_utils import get_data_statistics, generate_dataset
 from lib.adversarial.adversarial import *
 
 from art.classifiers import PyTorchClassifier
@@ -35,8 +35,6 @@ parser.add_argument('--data_path', type=str,
                     default='/nobackup/users/jzpan/datasets', help='path to dataset')
 parser.add_argument('--dataset', type=str,
                     help='choose dataset to benchmark adversarial training techniques on.')
-parser.add_argument('--input_size', type=int, default=-1,
-                    help='input size for adv training; use -1 to use default input size')
 parser.add_argument('--arch', metavar='ARCH', default='resnet50',
                     help='model architecture: to evaluate robustness on (default: resnet50)')
 parser.add_argument('--workers', type=int, default=16,
@@ -76,6 +74,9 @@ parser.add_argument('--attacks', type=str, nargs='+', default=[
                     'fgsm', 'pgd', 'deepfool', 'bim'], help='list of attacks to evaluate')
 parser.add_argument('--epsilons', type=float, nargs='+', default=[2/255, 4/255, 8/255, 16/255], help='epsilon values to use for attacks')
 parser.add_argument('--defences', type=str, nargs='+', default=[], help='list of defences to evaluate')
+parser.add_argument('--input_size', type=int, default=-1,
+                    help='input size for adv training; use -1 to use default input size')
+parser.add_argument('--inc_contrast', type=int, default=1, help='factor to increase the dataset contrast')
 
 global best_acc1, best_loss
 
@@ -236,7 +237,9 @@ if __name__ == '__main__':
 
     criterion = torch.nn.CrossEntropyLoss()
     train_loader, test_loader, num_classes = generate_dataset(
-        args.dataset, args.data_path, input_size, args.batch_size, args.workers)
+        args.dataset, args.data_path, input_size, args.batch_size, args.workers, args.inc_contrast)
+
+    mean, std = get_data_statistics(train_loader)
 
     model = models.__dict__[args.arch](num_classes=num_classes)
     assert os.path.isfile(
