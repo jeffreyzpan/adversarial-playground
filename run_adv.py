@@ -76,7 +76,7 @@ parser.add_argument('--epsilons', type=float, nargs='+', default=[2/255, 4/255, 
 parser.add_argument('--defences', type=str, nargs='+', default=[], help='list of defences to evaluate')
 parser.add_argument('--input_size', type=int, default=-1,
                     help='input size for adv training; use -1 to use default input size')
-parser.add_argument('--inc_contrast', type=int, default=1, help='factor to increase the dataset contrast')
+parser.add_argument('--inc_contrast', type=float, default=1, help='factor to increase the dataset contrast')
 
 global best_acc1, best_loss
 
