@@ -54,7 +54,7 @@
         "eps": 16
     },
     "tvm":{
-        "prob": 0.3,
+        "prob": 0.8,
         "lamb": 0.5,
         "clip_min": 0,
         "clip_max": 1,

@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from art.attacks.evasion import CarliniLInfMethod
 import art.defences as defences
 
 def gen_attacks(test_loader, classifier, attacks, epsilons, use_gpu=True): 
@@ -13,6 +14,7 @@ def gen_attacks(test_loader, classifier, attacks, epsilons, use_gpu=True):
         print(attack_name)
         adv_list = [[] for i in range(len(epsilons))]
         for i, (inputs, target) in enumerate(test_loader):
+            print(i)
             if use_gpu:
                 inputs = inputs.cuda(non_blocking=True)
                 target = target.cuda(non_blocking=True)
@@ -30,6 +32,29 @@ def gen_attacks(test_loader, classifier, attacks, epsilons, use_gpu=True):
         adv_dict[attack_name] = adv_list
         print('done')
 
+    return adv_dict
+
+def cw_linf(classifier, test_loader, epsilons):
+
+    adv_dict = {}
+    adv_list = []
+
+    test_image_batches, test_label_batches = zip(*[batch for batch in test_loader])
+    test_images = torch.cat(test_image_batches).numpy()
+    test_labels = torch.cat(test_label_batches).numpy()
+
+    for epsilon in epsilons:
+        print('running cw_linf with eps {}'.format(epsilon))
+        attack = CarliniLInfMethod(classifier, eps=epsilon)
+        adv_examples = attack.generate(test_images)
+       
+        adv_set = torch.utils.data.TensorDataset(torch.from_numpy(adv_examples), torch.from_numpy(test_labels))
+        adv_loader = torch.utils.data.DataLoader(adv_set, batch_size=128, num_workers=16)
+        adv_list.append(adv_loader)
+        print('done')
+
+    adv_dict['cw_Linf'] = adv_list
+    
     return adv_dict
 
 def gen_defences(test_images, adv_images, attack_name, test_labels, defences):
@@ -71,18 +96,18 @@ def adversarial_retraining(clean_dataloader, attack):
     
     return adv_loader 
 
-def thermometer_encoding(train_loader, adv_loader, thm_params):
+def thermometer_encoding(train_loader, adv_loader, thm_params, save=False):
 
-    thermometer_encoding = defences.ThermometerEncoding(clip_values=(thm_params['clip_min'], thm_params['clip_max']), num_space=thm_params['num_space'], channel_index=thm_params['channel_index']) 
+    encoding = defences.ThermometerEncoding(clip_values=(thm_params['clip_min'], thm_params['clip_max']), num_space=thm_params['num_space'], channel_index=thm_params['channel_index']) 
     
     print('Generating thermometer encoded images') 
     clean_image_batches, clean_label_batches = zip(*[batch for batch in train_loader])
     clean_images = torch.cat(clean_image_batches).numpy()
     clean_labels = torch.cat(clean_label_batches).numpy() 
-    clean_images  = np.transpose(clean_images, (0, 2, 3, 1))
 
-    thermometer_images, _  = thermometer_encoding(clean_images)
-    thermometer_images = np.transpose(thermometer_images, (0, 3, 1, 2))
+    thermometer_images, _  = encoding(clean_images)
+    if save:
+        np.save('../thermometer_encoded_clean.npy', thermometer_images)
 
     encoded_set = torch.utils.data.TensorDataset(torch.from_numpy(thermometer_images), torch.from_numpy(clean_labels).long())
     clean_encoded_loader = torch.utils.data.DataLoader(encoded_set, batch_size=128, num_workers=16)
@@ -91,8 +116,10 @@ def thermometer_encoding(train_loader, adv_loader, thm_params):
     adv_images = torch.cat(adv_images_batches).numpy()
     adv_labels = torch.cat(adv_label_batches).numpy() 
 
-    attacked_encoded, _  = thermometer_encoding(adv_images)
-    attacked_encoded = np.transpose(attacked_encoded, (0, 3, 1, 2))
+    attacked_encoded, _  = encoding(adv_images)
+
+    if save:
+        np.save('../thermometer_encoded_adversarial.npy', attacked_encoded)
 
     adv_encoded_set = torch.utils.data.TensorDataset(torch.from_numpy(attacked_encoded), torch.from_numpy(adv_labels).long())
     adv_encoded_loader = torch.utils.data.DataLoader(adv_encoded_set, batch_size=128, num_workers=16)

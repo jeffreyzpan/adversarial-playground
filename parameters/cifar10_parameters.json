@@ -54,8 +54,8 @@
         "eps": 16
     },
     "tvm":{
-        "prob": 0.3,
-        "lamb": 0.03,
+        "prob": 0.8,
+        "lamb": 0.3,
         "clip_min": 0,
         "clip_max": 1,
         "max_iter": 25
@@ -64,7 +64,7 @@
         "clip_min": 0,
         "clip_max": 1,
         "channel_index": 1,
-        "quality": 10
+        "quality": 50
     },
     "i_defender":{
         "p_value": 2705,

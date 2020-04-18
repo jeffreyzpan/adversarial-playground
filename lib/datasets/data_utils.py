@@ -10,7 +10,30 @@ from .load_urbansound import load_mfcc_dataset, load_envnet_dataset
 from .load_xrays import create_xrays_dataset
 from .load_gtsrb import create_gtsrb_dataset
 
-def generate_dataset(name, path, input_size, batch_size, num_workers, **kwargs):
+class AdjustContrast:
+
+    def __init__(self, adjustment=1):
+        self.adjustment = adjustment
+
+    def __call__(self, x):
+        return transforms.functional.adjust_contrast(x, self.adjustment)
+
+def get_data_statistics(data_loader):
+    mean = 0.
+    std = 0.
+    nb_samples = 0.
+    for (data, labels) in data_loader:
+        batch_samples = data.size(0)
+        data = data.view(batch_samples, data.size(1), -1)
+        mean += data.mean(2).sum(0)
+        std += data.std(2).sum(0)
+        nb_samples += batch_samples
+
+    mean /= nb_samples
+    std /= nb_samples
+    return mean, std
+
+def generate_dataset(name, path, input_size, batch_size, num_workers, inc_contrast=1, **kwargs):
 
     print('==> Loading dataset {}...'.format(name))
     if name == 'imagenet':
@@ -18,27 +41,26 @@ def generate_dataset(name, path, input_size, batch_size, num_workers, **kwargs):
         val_path = os.path.join(path, name, 'val')
         assert os.path.exists(train_path), train_path + ' not found'
         assert os.path.exists(val_path), val_path + ' not found'
-        #normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-        #                                 std=[0.229, 0.224, 0.225])
+        
+        train_transform_list = [AdjustContrast(inc_contrast),
+                transforms.RandomResizedCrop(input_size), 
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor()]
+
+        test_transform_list = [AdjustContrast(inc_contrast),
+                transforms.Resize(int(input_size / 0.875)),
+                transforms.CenterCrop(input_size),
+                transforms.ToTensor()]
 
         train_loader = data.DataLoader(
             datasets.ImageFolder(
-                train_path, transforms.Compose([
-                    transforms.RandomResizedCrop(input_size),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor(),
-        #            normalize,
-                ])),
+                train_path, transforms.Compose(train_transform_list)),
             batch_size=batch_size, shuffle=True,
             num_workers=num_workers, pin_memory=True)
 
         val_loader = data.DataLoader(
-            datasets.ImageFolder(val_path, transforms.Compose([
-                transforms.Resize(int(input_size / 0.875)),
-                transforms.CenterCrop(input_size),
-                transforms.ToTensor(),
-        #       normalize,
-            ])),
+            datasets.ImageFolder(
+                val_path, transforms.Compose(test_transform_list)),
             batch_size=batch_size, shuffle=False,
             num_workers=num_workers, pin_memory=True)
 
@@ -46,24 +68,24 @@ def generate_dataset(name, path, input_size, batch_size, num_workers, **kwargs):
 
     elif name == 'cifar10':
         assert os.path.exists(path), path + ' not found'
-        #normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
-        #                                 std=[0.2023, 0.1994, 0.2010])
+
+        train_transform_list = [AdjustContrast(inc_contrast),
+                transforms.RandomResizedCrop(input_size), 
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor()]
+
+        test_transform_list = [AdjustContrast(inc_contrast),
+                transforms.ToTensor()]
+
         train_loader = data.DataLoader(
             datasets.CIFAR10(
-                path, True, transforms.Compose([
-                    transforms.RandomResizedCrop(input_size),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor(),
-        #            normalize,
-                ])),
+                path, True, transforms.Compose(train_transform_list)),
             batch_size=batch_size, shuffle=True,
             num_workers=num_workers, pin_memory=True)
 
         val_loader = data.DataLoader(
-            datasets.CIFAR10(path, False, transforms.Compose([
-                transforms.ToTensor(),
-        #        normalize,
-            ])),
+            datasets.CIFAR10(
+                path, False, transforms.Compose(test_transform_list)),
             batch_size=batch_size, shuffle=False,
             num_workers=num_workers, pin_memory=True)
 
@@ -71,25 +93,25 @@ def generate_dataset(name, path, input_size, batch_size, num_workers, **kwargs):
 
     elif name == 'cifar100':
         assert os.path.exists(path), path + ' not found'
-        #normalize = transforms.Normalize(mean=[0.5070751592371323, 0.48654887331495095, 0.4409178433670343],
-        #                                 std=[0.2673342858792401, 0.2564384629170883, 0.27615047132568404])
+
+        train_transform_list = [AdjustContrast(inc_contrast),
+                transforms.RandomResizedCrop(input_size), 
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomRotation(15),
+                transforms.ToTensor()]
+
+        test_transform_list = [AdjustContrast(inc_contrast),
+                transforms.ToTensor()]
+
         train_loader = data.DataLoader(
             datasets.CIFAR100(
-                path, True, transforms.Compose([
-                    transforms.RandomResizedCrop(input_size),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.RandomRotation(15),
-                    transforms.ToTensor(),
-        #            normalize,
-                ])),
+                path, True, transforms.Compose(train_transform_list)),
             batch_size=batch_size, shuffle=True,
             num_workers=num_workers, pin_memory=True)
 
         val_loader = data.DataLoader(
-            datasets.CIFAR100(path, False, transforms.Compose([
-                transforms.ToTensor(),
-        #        normalize,
-            ])),
+            datasets.CIFAR100(
+                path, False, transforms.Compose(test_transform_list)),
             batch_size=batch_size, shuffle=False,
             num_workers=num_workers, pin_memory=True)
 
@@ -97,25 +119,26 @@ def generate_dataset(name, path, input_size, batch_size, num_workers, **kwargs):
 
     elif name == 'mnist':
         assert os.path.exists(path), path + ' not found'
-        #normalize = transforms.Normalize((0.1307,), (0.3081,))
+
+        train_transform_list = [AdjustContrast(inc_contrast),
+                transforms.RandomResizedCrop(input_size), 
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor()]
+
+        test_transform_list = [AdjustContrast(inc_contrast),
+                transforms.Resize(int(input_size / 0.875)),
+                transforms.CenterCrop(input_size),
+                transforms.ToTensor()]
+
         train_loader = data.DataLoader(
             datasets.MNIST(
-                path, True, transforms.Compose([
-                    transforms.RandomResizedCrop(input_size),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor(),
-        #            normalize,
-                ])),
+                path, True, transforms.Compose(train_transform_list)),
             batch_size=batch_size, shuffle=True,
             num_workers=num_workers, pin_memory=True)
 
         val_loader = data.DataLoader(
-            datasets.MNIST(path, False, transforms.Compose([
-                transforms.Resize(int(input_size / 0.875)),
-                transforms.CenterCrop(input_size),
-                transforms.ToTensor(),
-        #        normalize,
-            ])),
+            datasets.MNIST(
+                path, False, transforms.Compose(test_transform_list)),
             batch_size=batch_size, shuffle=False,
             num_workers=num_workers, pin_memory=True)
 
@@ -123,21 +146,25 @@ def generate_dataset(name, path, input_size, batch_size, num_workers, **kwargs):
 
     elif name == 'fmnist':
         assert os.path.exists(path), path + ' not found'
+
+        train_transform_list = [AdjustContrast(inc_contrast),
+                transforms.RandomResizedCrop(input_size), 
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor()]
+
+        test_transform_list = [AdjustContrast(inc_contrast),
+                transforms.Resize(int(input_size / 0.875)),
+                transforms.CenterCrop(input_size),
+                transforms.ToTensor()]
+
         train_loader = data.DataLoader(
             datasets.FashionMNIST(
-                path, True, transforms.Compose([
-                    transforms.RandomResizedCrop(input_size),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor()
-                ])),
+                path, True, transforms.Compose(train_transform_list)),
             batch_size=batch_size, shuffle=True,
             num_workers=num_workers, pin_memory=True)
         val_loader = data.DataLoader(
-            datasets.FashionMNIST(path, False, transforms.Compose([
-                transforms.Resize(int(input_size / 0.875)),
-                transforms.CenterCrop(input_size),
-                transforms.ToTensor()
-            ])),
+            datasets.FashionMNIST(
+                path, False, transforms.Compose(test_transform_list)),
             batch_size=batch_size, shuffle=False,
             num_workers=num_workers, pin_memory=True)
 

@@ -15,9 +15,10 @@ import torchvision.utils as utils
 from torch.utils.tensorboard import SummaryWriter
 import lib.models as models
 from lib.utils.utils import *
-from lib.datasets.data_utils import generate_dataset
+from lib.datasets.data_utils import get_data_statistics, generate_dataset
 from lib.adversarial.adversarial import *
 
+from art.classifiers import PyTorchClassifier
 import art.defences as defences
 import numpy as np
 import foolbox as fb
@@ -34,8 +35,6 @@ parser.add_argument('--data_path', type=str,
                     default='/nobackup/users/jzpan/datasets', help='path to dataset')
 parser.add_argument('--dataset', type=str,
                     help='choose dataset to benchmark adversarial training techniques on.')
-parser.add_argument('--fold', type=int,
-                    help='if evaluating urbansound dataset, fold number to use for validation')
 parser.add_argument('--arch', metavar='ARCH', default='resnet50',
                     help='model architecture: to evaluate robustness on (default: resnet50)')
 parser.add_argument('--workers', type=int, default=16,
@@ -72,9 +71,12 @@ parser.add_argument('--start_epoch', type=int, default=0,
 
 # Experiments
 parser.add_argument('--attacks', type=str, nargs='+', default=[
-                    'fgsm', 'carliniL2', 'pgd', 'deepfool', 'hopskipjump', 'pixelattack'], help='list of attacks to evaluate')
+                    'fgsm', 'pgd', 'deepfool', 'bim'], help='list of attacks to evaluate')
 parser.add_argument('--epsilons', type=float, nargs='+', default=[2/255, 4/255, 8/255, 16/255], help='epsilon values to use for attacks')
 parser.add_argument('--defences', type=str, nargs='+', default=[], help='list of defences to evaluate')
+parser.add_argument('--input_size', type=int, default=-1,
+                    help='input size for adv training; use -1 to use default input size')
+parser.add_argument('--inc_contrast', type=float, default=1, help='factor to increase the dataset contrast')
 
 global best_acc1, best_loss
 
@@ -227,15 +229,17 @@ if __name__ == '__main__':
 
     # set variables based on dataset to evaluate on
     if args.dataset == 'imagenet':
-        input_size = 224
+        input_size = 224 if args.input_size == -1 else args.input_size
     elif args.dataset == 'cifar10' or args.dataset == 'cifar100':
-        input_size = 32
+        input_size = 32 if args.input_size == -1 else args.input_size
     elif args.dataset == 'mnist' or args.dataset == 'fmnist':
-        input_size = 28
+        input_size = 28 if args.input_size == -1 else args.input_size
 
     criterion = torch.nn.CrossEntropyLoss()
     train_loader, test_loader, num_classes = generate_dataset(
-        args.dataset, args.data_path, input_size, args.batch_size, args.workers)
+        args.dataset, args.data_path, input_size, args.batch_size, args.workers, args.inc_contrast)
+
+    mean, std = get_data_statistics(train_loader)
 
     model = models.__dict__[args.arch](num_classes=num_classes)
     assert os.path.isfile(
@@ -294,18 +298,31 @@ if __name__ == '__main__':
         parameter_list = json.load(f)
     epsilons = args.epsilons
 
+    #white box attacks
     if 'fgsm' in args.attacks:
         attack_list['fgsm'] = fb.attacks.FGSM()
-    if 'carliniL2' in args.attacks:
-        attack_list['carliniL2'] = fb.attacks.L2CarliniWagnerAttack()
+    if 'carliniLinf' in args.attacks:
+        # Use ART implementation as Foolbox doesn't have Linf CW attack
+        art_classifier = PyTorchClassifier(copy.deepcopy(model), loss=criterion, optimizer=optimizer, input_shape=input_shape, nb_classes=num_classes)
+        cw_dict = cw_linf(art_classifier, test_loader, epsilons)
+        
     if 'pgd' in args.attacks:
         attack_list['pgd'] = fb.attacks.PGD()
     if 'deepfool' in args.attacks:
         attack_list['deepfool'] = fb.attacks.LinfDeepFoolAttack()
     if 'bim' in args.attacks:
         attack_list['bim'] = fb.attacks.LinfBasicIterativeAttack()
+
+    #black box attacks
+
     if 'boundary' in args.attacks:
         attack_list['boundary'] = fb.attacks.BoundaryAttack()
+    if 'saltandpepper' in args.attacks:
+        attack_list['saltandpepper'] = fb.attacks.SaltAndPepperNoiseAttack()
+    if 'gaussian' in args.attacks:
+        attack_list['gaussian'] = fb.attacks.L2RepeatedAdditiveGaussianNoiseAttack()
+    if 'uniform' in args.attacks:
+        attack_list['uniform'] = fb.attacks.L2RepeatedAdditiveUniformNoiseAttack()
 
     # initialize defences and append to dict
 
@@ -315,29 +332,28 @@ if __name__ == '__main__':
             pixel_params['clip_min'], pixel_params['clip_min']), eps=pixel_params['eps'])
     if 'tvm' in args.defences:
         tvm_params = parameter_list['tvm']
-        for lamb in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
-            defence_list['tvm_{}'.format(lamb)] = defences.TotalVarMin(clip_values=(
-                tvm_params['clip_min'], tvm_params['clip_max']), prob=tvm_params['prob'], lamb=lamb, max_iter=tvm_params['max_iter'])
+        defence_list['tvm'] = defences.TotalVarMin(clip_values=(
+            tvm_params['clip_min'], tvm_params['clip_max']), prob=tvm_params['prob'], lamb=tvm_params['lamb'], max_iter=tvm_params['max_iter'])
     if 'jpeg' in args.defences:
         jpeg_params = parameter_list['jpeg']
-        for i in range(10, 100, 10):
-            defence_list['jpeg_{}'.format(i)] = defences.JpegCompression(clip_values=(
-                 jpeg_params['clip_min'], jpeg_params['clip_max']), channel_index=jpeg_params['channel_index'], quality=i)
+        defence_list['jpeg'] = defences.JpegCompression(clip_values=(
+            jpeg_params['clip_min'], jpeg_params['clip_max']), channel_index=jpeg_params['channel_index'], quality=jpeg_params['quality'])
     if 'i_defender' in args.defences:
         model.module.insert_forward_hooks(input_shape, cuda=True)
         i_params = parameter_list['i_defender']
         defense_model = models.__dict__['i_defender'](model, train_loader, num_classes, i_params['p_value'],
                                                       n_components=i_params['n_components'], max_iter=i_params['max_iter'], n_init=i_params['n_init'])
         model.module.remove_hooks()
+    '''
     if 'thermometer' in args.defences:
         thermometer_params = parameter_list['thermometer']
         defence_list['thermometer'] = defences.ThermometerEncoding(clip_values=(
             thermometer_params['clip_min'], thermometer_params['clip_max']), num_space=thermometer_params['num_space'], channel_index=thermometer_params['channel_index'])
-
     if 'distillation' in args.defences:
         distillation_params = parameter_list['distillation']
         defence_list['distillation'] = defences.transformer.DefensiveDistillation(
             classifier, batch_size=distillation_params['batch_size'], nb_epochs=distillation_params['epochs'])
+    '''
 
     # get initial validation set accuracy
 
@@ -346,6 +362,10 @@ if __name__ == '__main__':
     #convert dataloader into an eagerPy tensor for FoolBox attack generation 
     adv_dict = gen_attacks(test_loader,
                            classifier, attack_list, epsilons)
+
+    #append cw attack if evaluated
+    if 'carliniLinf' in args.attacks:
+        adv_dict.update(cw_dict)
 
     # loop through all generated dataloaders with adversarial images
     results_dict = {}
@@ -438,6 +458,19 @@ if __name__ == '__main__':
                             adv_encoded_loader, enc_model, criterion, epoch, args)
                         top1 = max(top1, acc1)
                     accuracies['thermometer'] = acc1.item()
+
+            if 'distillation' in args.defences:
+                ibm_classifier = PyTorchClassifier(model, criterion, optimizer, (1, 28, 28), 10)
+                distillation_params = parameter_list['distillation']
+                distiller = defences.transformer.DefensiveDistillation(
+                    ibm_classifier, batch_size=distillation_params['batch_size'], nb_epochs=distillation_params['epochs'])
+
+                clean_batches, clean_labels = zip(*[batch for batch in train_loader])
+                clean_images = torch.cat(clean_batches).numpy()
+                new_classifier = copy.deepcopy(ibm_classifier)
+                new_classifier = distiller(clean_images, new_classifier)
+                import pdb
+                pdb.set_trace()
 
             for def_name in def_adv_dict:
                 print("Testing performance of defence {}: ".format(def_name))
