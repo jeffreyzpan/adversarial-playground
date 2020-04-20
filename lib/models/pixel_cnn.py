@@ -150,7 +150,10 @@ class PixelCNN(nn.Module):
         assert len(u_list) == len(ul_list) == 0, pdb.set_trace()
 
         return x_out
-        
+
+def pixel_cnn(input_channels=3):
+    return PixelCNN(nr_resnet=5, nr_filters=160, input_channels=input_channels, nr_logistic_mix=10)        
+
 
 if __name__ == '__main__':
     ''' testing loss with tf version '''

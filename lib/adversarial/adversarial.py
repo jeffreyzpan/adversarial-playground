@@ -45,7 +45,7 @@ def cw_linf(classifier, test_loader, epsilons):
 
     for epsilon in epsilons:
         print('running cw_linf with eps {}'.format(epsilon))
-        attack = CarliniLInfMethod(classifier, eps=epsilon)
+        attack = CarliniLInfMethod(classifier, eps=epsilon, confidence=0.5, max_iter=10000)
         adv_examples = attack.generate(test_images)
        
         adv_set = torch.utils.data.TensorDataset(torch.from_numpy(adv_examples), torch.from_numpy(test_labels))
@@ -66,13 +66,7 @@ def gen_defences(test_images, adv_images, attack_name, test_labels, defences):
         
         print(defence_name)
 
-        #ART defences take in w x h x c, while original input is (c, w, h)
-        #adv_images = np.moveaxis(adv_images, 1, -1)
-        
         def_adv, _ = defence(adv_images)
-
-        #switch channel axis for conversion back to PyTorch
-        #def_adv = np.moveaxis(def_adv, -1, 1)
 
         #convert np array of defended images to PyTorch dataloader for CUDA validation later
 
