@@ -75,6 +75,8 @@ def generate_dataset(name, path, input_size, batch_size, num_workers, inc_contra
                 transforms.ToTensor()]
 
         test_transform_list = [AdjustContrast(inc_contrast),
+                transforms.Resize(int(input_size / 0.875)),
+                transforms.CenterCrop(input_size),
                 transforms.ToTensor()]
 
         train_loader = data.DataLoader(
@@ -101,8 +103,10 @@ def generate_dataset(name, path, input_size, batch_size, num_workers, inc_contra
                 transforms.ToTensor()]
 
         test_transform_list = [AdjustContrast(inc_contrast),
+                transforms.Resize(int(input_size / 0.875)),
+                transforms.CenterCrop(input_size),
                 transforms.ToTensor()]
-
+        
         train_loader = data.DataLoader(
             datasets.CIFAR100(
                 path, True, transforms.Compose(train_transform_list)),

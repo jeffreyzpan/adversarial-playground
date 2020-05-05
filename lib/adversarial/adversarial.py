@@ -3,7 +3,7 @@ import numpy as np
 from art.attacks.evasion import CarliniLInfMethod
 import art.defences as defences
 
-def gen_attacks(test_loader, classifier, attacks, epsilons, use_gpu=True): 
+def gen_attacks(test_loader, classifier, attacks, epsilons, gpu_id_list='0,1,2,3', use_gpu=True): 
 
     adv_dict = {}
     test_labels = torch.tensor(test_loader.dataset.targets).long()
@@ -16,8 +16,8 @@ def gen_attacks(test_loader, classifier, attacks, epsilons, use_gpu=True):
         for i, (inputs, target) in enumerate(test_loader):
             print(i)
             if use_gpu:
-                inputs = inputs.cuda(non_blocking=True)
-                target = target.cuda(non_blocking=True)
+                inputs = inputs.cuda(f'cuda:{gpu_id_list}', non_blocking=True)
+                target = target.cuda(f'cuda:{gpu_id_list}', non_blocking=True)
             _, adv, success = attack(classifier, inputs, target, epsilons=epsilons)
             for i, adv_images in enumerate(adv):
                 adv_list[i].append(adv_images.cpu()) 
@@ -57,7 +57,7 @@ def cw_linf(classifier, test_loader, epsilons):
     
     return adv_dict
 
-def gen_defences(test_images, adv_images, attack_name, test_labels, defences):
+def gen_defences(adv_loader, attack_name, defences):
     
     def_adv_dict = {}
 
@@ -65,12 +65,23 @@ def gen_defences(test_images, adv_images, attack_name, test_labels, defences):
     for defence_name, defence in zip(defences.keys(), defences.values()):
         
         print(defence_name)
+        def_adv_list = []
+        test_label_list = []
+        for i, (adv_images, test_labels) in enumerate(adv_loader):
+            print(i)
+            adv_images = adv_images.numpy()
+            test_labels = test_labels.numpy()
+            
+            adv_images = np.clip(adv_images, 0, 1)
 
-        def_adv, _ = defence(adv_images)
+            def_adv, _ = defence(adv_images)
+
+            def_adv_list.append(def_adv)
+            test_label_list.append(test_labels)
 
         #convert np array of defended images to PyTorch dataloader for CUDA validation later
 
-        def_adv_set = torch.utils.data.TensorDataset(torch.from_numpy(def_adv), torch.from_numpy(test_labels).long())
+        def_adv_set = torch.utils.data.TensorDataset(torch.from_numpy(np.concatenate(def_adv_list)), torch.from_numpy(np.concatenate(test_label_list)).long())
         def_adv_loader = torch.utils.data.DataLoader(def_adv_set, batch_size=128, num_workers=16)
         def_adv_dict[defence_name] = def_adv_loader
 

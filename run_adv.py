@@ -150,8 +150,8 @@ def validate(val_loader, model, criterion, epoch, args):
         end = time.time()
         for i, (inputs, target) in enumerate(val_loader):
             if '-1' not in args.gpu_ids:
-                inputs = inputs.cuda(non_blocking=True)
-                target = target.cuda(non_blocking=True)
+                inputs = inputs.to(f'cuda:{args.gpu_ids}', non_blocking=True)
+                target = target.to(f'cuda:{args.gpu_ids}', non_blocking=True)
 
             # compute output
             output = model(inputs)
@@ -208,7 +208,7 @@ if __name__ == '__main__':
     best_loss = np.iinfo(np.int16).max
 
     # set gpus ids to use
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_ids
+    #os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_ids
 
     # check that CUDA is actually available and pass in GPU ids, use CPU if not
     if torch.cuda.is_available():
@@ -279,14 +279,18 @@ if __name__ == '__main__':
                     weight_decay=args.weight_decay, nesterov=True)
 
     if -1 not in gpu_id_list:
-        model.cuda()
-        criterion.cuda()
+        model.to(f'cuda:{args.gpu_ids}')
+        criterion.to(f'cuda:{args.gpu_ids}')
 
     cudnn.benchmark = True
     if args.dataset in ['fmnist', 'mnist']:
         input_shape = (1, input_size, input_size)
     else:
         input_shape = (3, input_size, input_size)
+
+    # get initial validation set accuracy
+
+    initial_acc, _ = validate(test_loader, model, criterion, 1, args)
 
     # perform attacks and defences on dataset
 
@@ -356,12 +360,6 @@ if __name__ == '__main__':
         jpeg_params = parameter_list['jpeg']
         defence_list['jpeg'] = defences.JpegCompression(clip_values=(
             jpeg_params['clip_min'], jpeg_params['clip_max']), channel_index=jpeg_params['channel_index'], quality=jpeg_params['quality'])
-    '''
-    if 'thermometer' in args.defences:
-        thermometer_params = parameter_list['thermometer']
-        defence_list['thermometer'] = defences.ThermometerEncoding(clip_values=(
-            thermometer_params['clip_min'], thermometer_params['clip_max']), num_space=thermometer_params['num_space'], channel_index=thermometer_params['channel_index'])
-    '''
     if 'adv_retraining' in args.defences: 
         print("performing adversarial retraining using Madry's method")
         if args.pretrained_adv:
@@ -411,15 +409,14 @@ if __name__ == '__main__':
                             'optimizer' : optimizer.state_dict(),
                         }, is_best, os.path.join(args.save_path, 'adv_trained_model'))
         
-    # get initial validation set accuracy
 
-    initial_acc, _ = validate(test_loader, model, criterion, 1, args)
+    #initial_acc, _ = validate(test_loader, model, criterion, 1, args)
     #import pdb
     #pdb.set_trace()
 
     #convert dataloader into an eagerPy tensor for FoolBox attack generation 
     adv_dict = gen_attacks(test_loader,
-                           classifier, attack_list, epsilons)
+                           classifier, attack_list, epsilons, args.gpu_ids)
 
     #append cw attack if evaluated
     if 'carliniLinf' in args.attacks:
@@ -444,16 +441,7 @@ if __name__ == '__main__':
 
             print("Generating defences for attack {} with eps {}: ".format(attack_name, epsilon))
             
-            clean_image_batches, clean_label_batches = zip(*[batch for batch in test_loader])
-            test_images = torch.cat(clean_image_batches).numpy()
-            test_labels = torch.cat(clean_label_batches).numpy()
-            
-            adv_image_batches, _ = zip(*[batch for batch in epsilon_attack])
-            adv_images = torch.cat(adv_image_batches).numpy()
-            adv_images = np.clip(adv_images, 0, 1)
-
-            def_adv_dict = gen_defences(
-                test_images, adv_images, attack_name, test_labels, defence_list)
+            def_adv_dict = gen_defences(epsilon_attack, attack_name, defence_list)
             accuracies = {'initial': initial_acc.item(
             ), 'attacked': attacked_acc.item()}
 

@@ -126,6 +126,7 @@ def validate(val_loader, model, criterion, epoch, args):
 
             # compute output
             output = model(inputs)
+            print(inputs.shape)
             loss = criterion(output, target)
 
             # measure accuracy and record loss
@@ -148,6 +149,12 @@ def validate(val_loader, model, criterion, epoch, args):
     summary.add_scalar('test acc5', top5.avg, epoch)
     summary.add_scalar('test acc1', top1.avg, epoch)
     summary.add_scalar('test loss', losses.avg, epoch)
+
+    # visualize a batch of testing images
+    dataiter = iter(val_loader)
+    images, _ = dataiter.next()
+    img_grid = utils.make_grid(images)
+    summary.add_image("Validation Images", img_grid)
 
     return top1.avg, losses.avg
 

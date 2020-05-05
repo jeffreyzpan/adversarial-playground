@@ -20,6 +20,7 @@ class mnistCNN(nn.Module):
     def forward(self, x):
         #if self.thermometer_encode:
         #    x = torch.cat((x[0]), dim=1)
+
         x = self.relu(self.conv1(x))
         x = self.pool1(x)
         x = self.relu(self.conv2(x))
