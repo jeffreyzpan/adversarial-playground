@@ -4,11 +4,15 @@ import numpy as np
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
+from torchvision.utils import save_image
 
 import torchvision.datasets as datasets
 from .load_urbansound import load_mfcc_dataset, load_envnet_dataset
 from .load_xrays import create_xrays_dataset
 from .load_gtsrb import create_gtsrb_dataset
+
+from io import BytesIO
+from PIL import Image
 
 class AdjustContrast:
 
@@ -33,6 +37,19 @@ def get_data_statistics(data_loader):
     std /= nb_samples
     return mean, std
 
+def get_image_complexity(image, out, name):
+    image.save(os.path.join(out, '{}.jpeg'.format(name)), format='jpeg', quality=95)
+    old_size = os.stat(os.path.join(out, '{}.jpeg'.format(name))).st_size
+
+    image_copy = Image.open(os.path.join(out, '{}.jpeg'.format(name)))
+    image_copy.save(os.path.join(out, '{}_comp.jpeg'.format(name)), format='jpeg', quality=10)
+    new_size = os.stat(os.path.join(out, '{}_comp.jpeg'.format(name))).st_size
+
+    os.remove(os.path.join(out, '{}.jpeg'.format(name)))
+    os.remove(os.path.join(out, '{}_comp.jpeg'.format(name)))
+
+    return new_size / old_size
+        
 def generate_dataset(name, path, input_size, batch_size, num_workers, inc_contrast=1, **kwargs):
 
     print('==> Loading dataset {}...'.format(name))
