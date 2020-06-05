@@ -47,6 +47,60 @@ Defenses
 - [Total Variance Minimization](https://arxiv.org/abs/1711.00117)
 - [JPEG Compression](https://arxiv.org/abs/1711.00117)
 
+## Usage
+
+We provide pretrained models for each dataset and contrast/image size combination:
+
+| Model (contrast setting, input size, dataset) | Download                                                                             |   |   |   |
+|-----------------------------------------------|--------------------------------------------------------------------------------------|---|---|---|
+| Contrast 0.5x 28 MNIST                        | https://drive.google.com/drive/folders/1EQ62QcDnCBiQQ-1myAl4jQfz-fPq5gEC?usp=sharing |   |   |   |
+| Contrast 0.5x 28 Fashion-MNIST                | https://drive.google.com/drive/folders/1qCpyf4CsiFFKYoXMelHdle0ILWjI00Ok?usp=sharing |   |   |   |
+| Contrast 0.5x 32 CIFAR-10                     | https://drive.google.com/drive/folders/18qqzJ9_hbLc911b59HZnHdebF-K_d9aY?usp=sharing |   |   |   |
+| Contrast 0.5x 32 CIFAR-100                    | https://drive.google.com/drive/folders/1WpXjWLMIsgGRSh1pJbrjlbGTOluEsp5l?usp=sharing |   |   |   |
+| Contrast 0.5x 224 ImageNet                    | https://drive.google.com/drive/folders/1hJIRT8ECmzVubwM1EfeQJhJoWImC7zK2?usp=sharing |   |   |   |
+| Contrast 1x 14 MNIST                          | https://drive.google.com/drive/folders/110hkVJJ2TW1dETL9eX6QBsTlTGdoqMHh?usp=sharing |   |   |   |
+| Contrast 1x 28 MNIST                          | https://drive.google.com/drive/folders/1MWE-WkZFELT8MFiFif2uC36kjBK9-M7j?usp=sharing |   |   |   |
+| Contrast 1x 56 MNIST                          | https://drive.google.com/drive/folders/1W0w2op0OxtFYKEU-pzXZh9HudQnuq85X?usp=sharing |   |   |   |
+| Contrast 1x 14 Fashion-MNIST                  | https://drive.google.com/drive/folders/1eJCb9SqIOz6u2efkVirxjowSs-wwkia-?usp=sharing |   |   |   |
+| Contrast 1x 28 Fashion-MNIST                  | https://drive.google.com/drive/folders/1WBy18ujY86YPFHZCa8hHk_rZJHuLr_jv?usp=sharing |   |   |   |
+| Contrast 1x 56 Fashion-MNIST                  | https://drive.google.com/drive/folders/1ihfU9KFSJw3QkJwEnCQI34diosKasLjD?usp=sharing |   |   |   |
+| Contrast 1x 16 CIFAR-10                       | https://drive.google.com/drive/folders/1KmyIDqfEKRG07WEStswkGjk_9r9PWnpB?usp=sharing |   |   |   |
+| Contrast 1x 32 CIFAR-10                       | https://drive.google.com/drive/folders/1ueE0mkqNA3BlBbjv8otG-J_tGqgeKbrT?usp=sharing |   |   |   |
+| Contrast 1x 64 CIFAR-10                       | https://drive.google.com/drive/folders/1sHujcFzbhhDfShe_BviKnY3ZUiST1R8v?usp=sharing |   |   |   |
+| Contrast 1x 16 CIFAR-100                      | https://drive.google.com/drive/folders/1eoL6UhUKqUiS11HG8jX2TMsnNDEnUO24?usp=sharing |   |   |   |
+| Contrast 1x 32 CIFAR-100                      | https://drive.google.com/drive/folders/1Ku1PgqwfgwUz2WeRE9se8fssrMYWHrPn?usp=sharing |   |   |   |
+| Contrast 1x 64 CIFAR-100                      | https://drive.google.com/drive/folders/1qOatyoThvlv04WVTEX7jwpkAfrUpFlim?usp=sharing |   |   |   |
+| Contrast 1x 56 ImageNet                       | https://drive.google.com/drive/folders/1y5FA7oe1Bd4UsdZduCaukuQUVl_Fz916?usp=sharing |   |   |   |
+| Contrast 1x 112 ImageNet                      | https://drive.google.com/drive/folders/1pBz3S48H9dZFRmJPBYqs1VtjiYPht3in?usp=sharing |   |   |   |
+| Contrast 1x 224 ImageNet                      | https://drive.google.com/drive/folders/174UT9MDuUqa9kc_nIb81lJdBjmecB1Oh?usp=sharing |   |   |   |
+| Contrast 2x 28 MNIST                          | https://drive.google.com/drive/folders/1oC_83FcwLEgagUZTFXSeyz8hf6Xc-32g?usp=sharing |   |   |   |
+| Contrast 2x 28 Fashion-MNIST                  | https://drive.google.com/drive/folders/1C3DLl1-uqScqfwE_Ri-PmOcdN08JpWL1?usp=sharing |   |   |   |
+| Contrast 2x 32 CIFAR-10                       | https://drive.google.com/drive/folders/1R4CAIarUvoq5J9KA1H2uGei9YFTP4sPw?usp=sharing |   |   |   |
+| Contrast 2x 32 CIFAR-100                      | https://drive.google.com/drive/folders/1cov7wYiBeVuHMkyQZW29pKTjFjCOYVxD?usp=sharing |   |   |   |
+| Contrast 2x 224 ImageNet                      | https://drive.google.com/drive/folders/1-e7WsjplMyJAJENBHMV1Z47CihLWpTvO?usp=sharing |   |   |   |
+
+To run an experiment for all datasets, use the scripts in the `scripts` directory.
+
+```
+GPU=0,1,2,3
+INPUT_SIZE=32
+CONTRAST=1 (leave as 1 for default contrast)
+
+./scripts/run_{dataset_name}.sh GPU INPUT_SIZE CONTRAST
+```
+
+Due to the excessive runtime of ImageNet experiments, we recommend using the `attack_imagenet.sh` script in the `scripts` directory, as that script runs a single attack with a given epsilon value, rather than running all epsilon values and all attacks for a dataset. 
+
+```
+GPU=0,1,2,3
+ATTACK=fgsm from {fgsm,bim,pgd,deepfool}
+EPS=0.06274 (16/255)
+INPUT_SIZE=224
+CONTRAST=1 (leave as 1 for default contrast)
+
+./scripts/run_{dataset_name}.sh GPU ATTACK EPS INPUT_SIZE CONTRAST
+```
+
 ## Input Size Results 
 
 ![images](./figs/mnist_input_size.png)
