@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from art.attacks.evasion import CarliniLInfMethod
 import art.defences as defences
+from tqdm import tqdm
 
 def gen_attacks(test_loader, classifier, attacks, epsilons, gpu_id_list='0,1,2,3', use_gpu=True): 
 
@@ -13,8 +14,7 @@ def gen_attacks(test_loader, classifier, attacks, epsilons, gpu_id_list='0,1,2,3
 
         print(attack_name)
         adv_list = [[] for i in range(len(epsilons))]
-        for i, (inputs, target) in enumerate(test_loader):
-            print(i)
+        for i, (inputs, target) in enumerate(tqdm(test_loader)):
             if use_gpu:
                 inputs = inputs.cuda(f'cuda:{gpu_id_list}', non_blocking=True)
                 target = target.cuda(f'cuda:{gpu_id_list}', non_blocking=True)
@@ -67,8 +67,7 @@ def gen_defences(adv_loader, attack_name, defences):
         print(defence_name)
         def_adv_list = []
         test_label_list = []
-        for i, (adv_images, test_labels) in enumerate(adv_loader):
-            print(i)
+        for i, (adv_images, test_labels) in enumerate(tqdm(adv_loader)):
             adv_images = adv_images.numpy()
             test_labels = test_labels.numpy()
             

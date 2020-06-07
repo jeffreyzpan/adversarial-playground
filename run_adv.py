@@ -17,6 +17,7 @@ import lib.models as models
 from lib.utils.utils import *
 from lib.datasets.data_utils import get_data_statistics, generate_dataset
 from lib.adversarial.adversarial import *
+from lib.adversarial.tvm import TotalVarMin
 
 from art.classifiers import PyTorchClassifier
 import art.defences as defences
@@ -354,7 +355,7 @@ if __name__ == '__main__':
 
     if 'tvm' in args.defences:
         tvm_params = parameter_list['tvm']
-        defence_list['tvm'] = defences.TotalVarMin(clip_values=(
+        defence_list['tvm'] = TotalVarMin(clip_values=(
             tvm_params['clip_min'], tvm_params['clip_max']), prob=tvm_params['prob'], lamb=tvm_params['lamb'], max_iter=tvm_params['max_iter'])
     if 'jpeg' in args.defences:
         jpeg_params = parameter_list['jpeg']
