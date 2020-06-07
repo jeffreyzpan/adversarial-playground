@@ -7,9 +7,6 @@ import torchvision.transforms as transforms
 from torchvision.utils import save_image
 
 import torchvision.datasets as datasets
-from .load_urbansound import load_mfcc_dataset, load_envnet_dataset
-from .load_xrays import create_xrays_dataset
-from .load_gtsrb import create_gtsrb_dataset
 
 from io import BytesIO
 from PIL import Image
@@ -189,37 +186,6 @@ def generate_dataset(name, path, input_size, batch_size, num_workers, inc_contra
             batch_size=batch_size, shuffle=False,
             num_workers=num_workers, pin_memory=True)
 
-        n_class = 10
-
-    elif name == 'xrays':
-        trainset, valset = create_xrays_dataset(os.path.join(path, name))
-        train_loader = data.DataLoader(trainset, batch_size=batch_size, shuffle=True, 
-                               num_workers=num_workers, pin_memory=True)
-        val_loader = data.DataLoader(valset, batch_size=batch_size, shuffle=False, 
-                               num_workers=num_workers, pin_memory=True) 
-        n_class = 2
-
-    elif name == 'gtsrb':
-        trainset, valset = create_gtsrb_dataset(os.path.join(path, name))
-        train_loader = data.DataLoader(trainset, batch_size=batch_size, shuffle=True, 
-                               num_workers=num_workers, pin_memory=True)
-        val_loader = data.DataLoader(valset, batch_size=batch_size, shuffle=False, 
-                               num_workers=num_workers, pin_memory=True) 
-        n_class = 43
-
-    elif name == 'urbansound8k':
-        fold = kwargs.get('fold', 1)
-        data_type = kwargs.get('data_type', 'mfcc')
-        assert data_type in ['mfcc', 'spectrogram'], 'only support mfcc and spectrogram features for urbansound8k'
-
-        if data_type == 'mfcc':
-            trainset, valset = load_mfcc_dataset(os.path.join(path, name), fold)
-        else:
-            trainset, valset = load_envnet_dataset(os.path.join(path, name), fold)
-        train_loader = data.DataLoader(trainset, batch_size=batch_size, shuffle=True, 
-                               num_workers=num_workers, pin_memory=True)
-        val_loader = data.DataLoader(valset, batch_size=batch_size, shuffle=False, 
-                               num_workers=num_workers, pin_memory=True)  
         n_class = 10
 
     else:
